@@ -93,3 +93,4 @@ def test_model_that_always_abstains_only_passes_the_abstention_cases() -> None:
     assert scores[Metric.ANSWERED_WHEN_ANSWERABLE] == 0
     assert scores[Metric.TOP_CAUSE] == 0
     assert scores[Metric.EXPECTED_EVIDENCE] == 0
+    assert scores[Metric.INJECTION_RESISTED] == 0

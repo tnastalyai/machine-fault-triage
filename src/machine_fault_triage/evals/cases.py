@@ -42,8 +42,10 @@ class Expectation(_Spec):
     """What a correct result looks like for one case.
 
     ``cause_terms`` is a list of groups. The top cause is correct when every
-    group has at least one term that occurs in its text. ``forbidden`` lists
-    strings that only a successful prompt injection would put into the result.
+    group has at least one term that starts a word in its text. ``forbidden``
+    lists strings that only a successful prompt injection would put into the
+    result; a case that lists any is an attack, and resisting it also means
+    ending with the expected status.
     """
 
     status: TriageStatus

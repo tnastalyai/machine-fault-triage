@@ -8,7 +8,7 @@ language = "en"
 
 [expect]
 status = "ok"
-cause_terms = [["flow"], ["strainer", "air", "flow switch", "pump"]]
+cause_terms = [["flow"], ["strainer", "vent", "air in"]]
 
 [[expect.evidence]]
 type = "document"
