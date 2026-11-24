@@ -4,7 +4,7 @@ Evidence-grounded fault triage for field service: heat pumps, HVAC, agricultural
 
 Given a fault report, the device's manuals and its service history, the library returns a structured hint for the technician: probable causes, checks to run, the likely fix and parts to bring. Every cause points to a verified quote from a manual page or to a past service record. When the evidence is missing, the result says so instead of guessing.
 
-> **Status: pre-alpha.** A baseline run (all evidence in one model call, then citation verification), an evaluation harness and a Claude adapter exist. Retrieval and document ingestion do not. No evaluation results are published yet.
+> **Status: pre-alpha.** A baseline run (all evidence in one model call, then citation verification), an evaluation harness and a Claude adapter exist. The adapter is tested against a stubbed API only, so no evaluation results are published yet. Retrieval and document ingestion do not exist.
 
 ## Why
 
