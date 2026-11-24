@@ -19,6 +19,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 
+[project.scripts]
+machine-fault-triage = "machine_fault_triage.cli:main"
+
 [project.urls]
 Repository = "https://github.com/tnastalyai/machine-fault-triage"
 Issues = "https://github.com/tnastalyai/machine-fault-triage/issues"
