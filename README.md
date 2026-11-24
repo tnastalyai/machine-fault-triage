@@ -87,3 +87,7 @@ uv run pytest --cov
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions.
+
+## License
+
+[Apache-2.0](LICENSE)

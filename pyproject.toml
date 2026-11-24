@@ -4,6 +4,8 @@ version = "0.0.1"
 description = "Evidence-grounded fault triage for field service: heat pumps, HVAC, agricultural machinery."
 readme = "README.md"
 requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = [
     "pydantic>=2.9",
 ]
