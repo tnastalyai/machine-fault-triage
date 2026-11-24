@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from machine_fault_triage.cli import main
-from machine_fault_triage.evals import RunReport
+from machine_fault_triage.evals import Metric, RunReport
 from tests.evals.factories import CASE_TOML, write_dataset
 
 CORRECT = "tests.evals.factories:correct_model"
@@ -76,7 +76,7 @@ def test_unloadable_model_is_reported_as_a_usage_error(
     exit_code = run(write_dataset(tmp_path / "tiny"), model, tmp_path / "run.json")
 
     assert exit_code == 2
-    assert "cannot load a model factory" in capsys.readouterr().err
+    assert "cannot load a model from" in capsys.readouterr().err
 
 
 def test_broken_dataset_is_reported_as_a_usage_error(
@@ -101,3 +101,49 @@ def test_unreadable_report_is_reported_as_a_usage_error(
 
     assert exit_code == 2
     assert "cannot read a report" in capsys.readouterr().err
+
+
+def test_options_are_passed_to_the_model_callable(tmp_path: Path) -> None:
+    out = tmp_path / "run.json"
+
+    exit_code = main(
+        [
+            "eval",
+            "run",
+            "--dataset",
+            str(write_dataset(tmp_path / "tiny")),
+            "--model",
+            "tests.evals.factories:configured_model",
+            "--option",
+            "answer=correct",
+            "--out",
+            str(out),
+        ]
+    )
+
+    report = RunReport.model_validate_json(out.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert report.cases[0].repeats[0].scores[Metric.TOP_CAUSE] == 1
+
+
+@pytest.mark.parametrize("option", ["answer", "=correct", "unknown=1"])
+def test_option_the_model_callable_cannot_take_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], option: str
+) -> None:
+    exit_code = main(
+        [
+            "eval",
+            "run",
+            "--dataset",
+            str(write_dataset(tmp_path / "tiny")),
+            "--model",
+            "tests.evals.factories:configured_model",
+            "--option",
+            option,
+            "--out",
+            str(tmp_path / "run.json"),
+        ]
+    )
+
+    assert exit_code == 2
+    assert "cannot load a model from" in capsys.readouterr().err

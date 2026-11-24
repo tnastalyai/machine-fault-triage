@@ -105,3 +105,7 @@ def correct_model() -> FakeModel:
 
 def abstaining_model() -> FakeModel:
     return FakeModel([abstaining_draft()])
+
+
+def configured_model(answer: str) -> FakeModel:
+    return correct_model() if answer == "correct" else abstaining_model()

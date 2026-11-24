@@ -43,6 +43,13 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         help="import path of a callable that returns the model, as module:callable",
     )
+    run.add_argument(
+        "--option",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="keyword argument passed to the model callable; repeatable",
+    )
     run.add_argument("--label", help="model name recorded in the report")
     run.add_argument("--repeats", type=int, default=1, help="runs per case")
     run.add_argument("--out", type=Path, required=True, help="report file to write")
@@ -55,7 +62,7 @@ def _parser() -> argparse.ArgumentParser:
 def _run(arguments: argparse.Namespace) -> str:
     report = run_eval(
         load_dataset(arguments.dataset),
-        _load_model(arguments.model),
+        _load_model(arguments.model, arguments.option),
         model_label=arguments.label or arguments.model,
         repeats=arguments.repeats,
     )
@@ -69,15 +76,23 @@ def _compare(arguments: argparse.Namespace) -> str:
     )
 
 
-def _load_model(path: str) -> StructuredModel:
+def _load_model(path: str, options: Sequence[str]) -> StructuredModel:
     module_name, _, attribute = path.partition(":")
     try:
         factory = getattr(importlib.import_module(module_name), attribute)
-    except (ImportError, AttributeError, ValueError) as error:
-        message = f"cannot load a model factory from {path!r}: {error}"
+        model: StructuredModel = factory(**_keyword_arguments(options))
+    except (ImportError, AttributeError, ValueError, TypeError) as error:
+        message = f"cannot load a model from {path!r}: {error}"
         raise InvalidRequestError(message) from error
-    model: StructuredModel = factory()
     return model
+
+
+def _keyword_arguments(options: Sequence[str]) -> dict[str, str]:
+    pairs = [option.partition("=") for option in options]
+    if not all(key and separator for key, separator, _ in pairs):
+        message = "an option must look like KEY=VALUE"
+        raise ValueError(message)
+    return {key: value for key, _, value in pairs}
 
 
 def _read_report(path: Path) -> RunReport:
