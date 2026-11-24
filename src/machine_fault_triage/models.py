@@ -49,7 +49,9 @@ class DocumentSource(_Model):
 
     type: Literal["document"] = "document"
     document_id: str = Field(min_length=1)
+    document_title: str = Field(min_length=1)
     page: int = Field(ge=1)
+    section: str | None = None
     quote: str = Field(min_length=1)
     verified: bool = False
 

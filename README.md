@@ -8,7 +8,7 @@ Given a fault report (free text, optional photos of a display or nameplate), the
 
 ## Why
 
-A technician usually learns what is wrong only after arriving on site. The information needed for a first hypothesis often already exists: the error code is on a photo, its meaning is on page 42 of a manual, and the same model failed the same way last spring. This library connects those three sources before the visit.
+A technician usually learns what is wrong only after arriving on site. The information needed for a first hypothesis often already exists: the error code is on a photo, its meaning is on page 77 of a manual, and the same model failed the same way last spring. This library connects those three sources before the visit.
 
 The hard part is not generating a plausible answer. It is knowing when the answer is supported, and saying "not enough data" when it is not. The design is built around that constraint.
 
@@ -47,7 +47,9 @@ result = TriageResult(
             sources=(
                 DocumentSource(
                     document_id="service-manual",
-                    page=42,
+                    document_title="AquaHeat 12 service manual",
+                    page=77,
+                    section="7.3 Error codes",
                     quote="E7: flow sensor open or short circuit",
                     verified=True,
                 ),
@@ -57,6 +59,8 @@ result = TriageResult(
     parts_to_bring=("Flow sensor",),
 )
 ```
+
+Each source carries the evidence a technician can check: the document title, the page, the section and the exact quote. `verified` is set only after the quote has been found on that page.
 
 A cause without a verified source cannot claim more than low confidence; constructing one raises a validation error.
 

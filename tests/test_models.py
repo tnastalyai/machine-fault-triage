@@ -16,11 +16,19 @@ from machine_fault_triage import (
 
 
 def verified_quote() -> DocumentSource:
-    return DocumentSource(document_id="manual-1", page=42, quote="E7: flow sensor", verified=True)
+    return DocumentSource(
+        document_id="manual-1",
+        document_title="Service manual",
+        page=77,
+        quote="E7: flow sensor",
+        verified=True,
+    )
 
 
 def unverified_quote() -> DocumentSource:
-    return DocumentSource(document_id="manual-1", page=42, quote="E7: flow sensor")
+    return DocumentSource(
+        document_id="manual-1", document_title="Service manual", page=77, quote="E7: flow sensor"
+    )
 
 
 def service_record() -> HistorySource:
@@ -105,6 +113,16 @@ def test_result_with_causes_states_its_evidence_level() -> None:
         )
 
 
+def test_document_source_names_the_document_page_and_quote() -> None:
+    source = verified_quote()
+
+    assert (source.document_title, source.page, source.quote) == (
+        "Service manual",
+        77,
+        "E7: flow sensor",
+    )
+
+
 def test_not_enough_data_result_lists_what_is_missing() -> None:
     result = TriageResult(
         status=TriageStatus.NOT_ENOUGH_DATA,
@@ -141,7 +159,13 @@ def test_result_round_trips_through_json() -> None:
 def test_unknown_fields_are_rejected() -> None:
     with pytest.raises(ValidationError):
         DocumentSource.model_validate(
-            {"document_id": "manual-1", "page": 1, "quote": "text", "url": "https://example.test"}
+            {
+                "document_id": "manual-1",
+                "document_title": "Service manual",
+                "page": 1,
+                "quote": "text",
+                "url": "https://example.test",
+            }
         )
 
 
