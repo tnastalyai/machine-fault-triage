@@ -3,7 +3,7 @@
 ## Setup
 
 ```bash
-uv sync
+uv sync --all-extras
 uv run pre-commit install
 ```
 
@@ -30,7 +30,7 @@ uv run pytest --cov
 
 - [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/): `type(scope): description`, imperative mood.
 - Types: `feat`, `fix`, `perf`, `refactor`, `test`, `docs`, `ci`, `build`, `chore`.
-- Scopes follow the package layout: `models`, `ingest`, `retrieval`, `diagnosis`, `grounding`, `evals`, `safety`, `cli`.
+- Scopes follow the package layout: `models`, `ports`, `pipeline`, `grounding`, `evals`, `adapters`, `cli`, `testing`.
 - One logical change per commit, tests included.
 - Pull requests are squash-merged; the PR title follows the same convention.
 

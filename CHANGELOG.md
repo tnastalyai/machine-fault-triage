@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Evaluation harness: a TOML case format, metrics computed in code, repeated runs with a per-metric summary, and a paired comparison of two runs.
+- `machine-fault-triage eval run` and `eval compare` commands.
+- A seed dataset with two fictional devices and fifteen cases, including prompt-injection attempts.
+- `machine_fault_triage.adapters.claude.ClaudeModel`, installed with the `anthropic` extra.
 - `run_triage`: a baseline run that puts all supplied evidence into one model call and verifies the answer.
 - Citation verification: document quotes are checked against the cited page, history citations against the supplied records. Unsupported causes are reduced to low confidence.
 - Ports for plugging in a model, a document source and service history: `StructuredModel`, `DocumentProvider`, `HistoryProvider`.
