@@ -12,3 +12,6 @@ class InvalidRequestError(TriageError):
 class DatasetError(TriageError):
     """An evaluation dataset could not be loaded or contradicts itself."""
 
+
+class IncomparableRunsError(TriageError):
+    """Two evaluation runs cannot be compared because they used different datasets."""
