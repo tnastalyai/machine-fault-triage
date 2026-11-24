@@ -41,6 +41,11 @@ def evidence_level(causes: Sequence[Cause]) -> EvidenceLevel:
     return EvidenceLevel.GENERAL_KNOWLEDGE if causes else EvidenceLevel.NONE
 
 
+def contains_quote(text: str, quote: str) -> bool:
+    """Tell whether the quote occurs in the text, ignoring case and whitespace runs."""
+    return _normalize(quote) in _normalize(text)
+
+
 def _ground_cause(
     draft: DraftCause,
     documents: dict[str, Document],
@@ -88,7 +93,7 @@ def _ground_document_citation(
         document_title=document.title,
         page=draft.page,
         quote=draft.quote,
-        verified=page is not None and _normalize(draft.quote) in _normalize(page.text),
+        verified=page is not None and contains_quote(page.text, draft.quote),
     )
 
 

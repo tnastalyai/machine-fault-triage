@@ -7,3 +7,8 @@ class TriageError(Exception):
 
 class InvalidRequestError(TriageError):
     """A triage run was started with arguments that cannot be used."""
+
+
+class DatasetError(TriageError):
+    """An evaluation dataset could not be loaded or contradicts itself."""
+
