@@ -45,6 +45,26 @@ def test_eval_compare_prints_the_difference_between_two_reports(
     assert "improved  top_cause: e7" in printed
 
 
+def test_report_directory_is_created_when_missing(tmp_path: Path) -> None:
+    out = tmp_path / "runs" / "today" / "run.json"
+
+    exit_code = run(write_dataset(tmp_path / "tiny"), CORRECT, out)
+
+    assert exit_code == 0
+    assert out.is_file()
+
+
+def test_report_path_that_cannot_be_created_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "taken").write_text("a file, not a directory", encoding="utf-8")
+
+    exit_code = run(write_dataset(tmp_path / "tiny"), CORRECT, tmp_path / "taken" / "run.json")
+
+    assert exit_code == 2
+    assert "cannot write a report" in capsys.readouterr().err
+
+
 def test_label_overrides_the_model_name_in_the_report(tmp_path: Path) -> None:
     out = tmp_path / "run.json"
 

@@ -60,6 +60,11 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _run(arguments: argparse.Namespace) -> str:
+    try:
+        arguments.out.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        message = f"cannot write a report to {arguments.out}: {error}"
+        raise InvalidRequestError(message) from error
     report = run_eval(
         load_dataset(arguments.dataset),
         _load_model(arguments.model, arguments.option),
