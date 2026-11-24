@@ -39,4 +39,4 @@ A run repeats each case, because current models offer no deterministic mode. The
 - No metric checks that the cited text supports the cause. That, too, needs a judge.
 - Cases written with the help of a language model share its blind spots. The dataset needs cases written by hand, and a control run on a model from another provider, before its numbers are published.
 - With fifteen cases the standard errors are wide. The seed dataset can show that a change broke something. It cannot rank two models that are close.
-- Cost and latency are not recorded yet, because the model port does not report usage.
+- Every run is timed, and its token usage is kept when the model reports it. Prices are passed in by the caller and stored in the report, because the library does not track provider price lists.

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from machine_fault_triage import Generation, GenerationRequest, GenerationStatus
+from machine_fault_triage import Generation, GenerationRequest, GenerationStatus, Usage
 from machine_fault_triage.drafts import DraftCause, DraftTriage
 from machine_fault_triage.testing import FakeModel, FakeModelExhaustedError
 from tests.factories import draft_cause, draft_triage
@@ -23,6 +23,15 @@ def test_fake_model_can_script_a_refusal() -> None:
 
     assert generation.status is GenerationStatus.REFUSED
     assert generation.output is None
+
+
+def test_fake_model_reports_the_usage_it_was_given() -> None:
+    usage = Usage(input_tokens=120, output_tokens=30)
+    model = FakeModel([draft_triage([]), GenerationStatus.REFUSED, draft_cause()], usage=usage)
+
+    reported = [model.generate(REQUEST, DraftTriage).usage for _ in range(3)]
+
+    assert reported == [usage, usage, usage]
 
 
 def test_scripted_reply_of_another_type_counts_as_schema_invalid() -> None:

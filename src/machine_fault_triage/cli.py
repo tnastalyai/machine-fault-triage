@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from machine_fault_triage.errors import InvalidRequestError, TriageError
 from machine_fault_triage.evals.cases import load_dataset
 from machine_fault_triage.evals.compare import compare_runs, render_comparison
-from machine_fault_triage.evals.report import RunReport, render_summary
+from machine_fault_triage.evals.report import Pricing, RunReport, render_summary
 from machine_fault_triage.evals.runner import run_eval
 from machine_fault_triage.ports import StructuredModel
 
@@ -52,6 +52,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--label", help="model name recorded in the report")
     run.add_argument("--repeats", type=int, default=1, help="runs per case")
+    run.add_argument(
+        "--price",
+        type=float,
+        nargs=2,
+        metavar=("INPUT", "OUTPUT"),
+        help="model price in US dollars per million input and output tokens",
+    )
     run.add_argument("--out", type=Path, required=True, help="report file to write")
     compare = commands.add_parser("compare", help="compare two reports case by case")
     compare.add_argument("baseline", type=Path)
@@ -70,9 +77,20 @@ def _run(arguments: argparse.Namespace) -> str:
         _load_model(arguments.model, arguments.option),
         model_label=arguments.label or arguments.model,
         repeats=arguments.repeats,
+        pricing=_pricing(arguments.price),
     )
     arguments.out.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
     return render_summary(report)
+
+
+def _pricing(price: Sequence[float] | None) -> Pricing | None:
+    if price is None:
+        return None
+    try:
+        return Pricing(input=price[0], output=price[1])
+    except ValidationError as error:
+        message = f"a price cannot be negative: {error}"
+        raise InvalidRequestError(message) from error
 
 
 def _compare(arguments: argparse.Namespace) -> str:

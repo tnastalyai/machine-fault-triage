@@ -1,7 +1,8 @@
 import pytest
 
-from machine_fault_triage import GenerationStatus, InvalidRequestError, TriageStatus
-from machine_fault_triage.evals import Metric, RunReport, run_eval, summarize
+from machine_fault_triage import GenerationStatus, InvalidRequestError, TriageStatus, Usage
+from machine_fault_triage.evals import Metric, Pricing, RunReport, run_eval, summarize
+from machine_fault_triage.evals.report import render_summary
 from machine_fault_triage.testing import FakeModel
 from tests.evals.factories import (
     abstaining_draft,
@@ -59,6 +60,46 @@ def test_single_case_has_no_standard_error() -> None:
     report = run_eval(dataset([answerable_case()]), FakeModel([correct_draft()]), model_label="x")
 
     assert {summary.standard_error for summary in summarize(report)} == {None}
+
+
+def test_reported_tokens_are_totalled_and_priced() -> None:
+    model = FakeModel(
+        [correct_draft(), GenerationStatus.REFUSED],
+        usage=Usage(input_tokens=2_000_000, output_tokens=500_000),
+    )
+
+    report = run_eval(
+        dataset([answerable_case()]),
+        model,
+        model_label="scripted",
+        repeats=2,
+        pricing=Pricing(input=2, output=10),
+    )
+
+    assert report.usage() == Usage(input_tokens=4_000_000, output_tokens=1_000_000)
+    assert report.cost() == 18
+    assert all(run.seconds >= 0 for run in report.runs())
+    assert "4000000 input and 1000000 output tokens" in render_summary(report)
+    assert "$18.00 in total, $9.0000 per run" in render_summary(report)
+
+
+def test_cost_is_unknown_without_usage_or_without_pricing() -> None:
+    silent = run_eval(
+        dataset([answerable_case()]),
+        FakeModel([correct_draft()]),
+        model_label="x",
+        pricing=Pricing(input=2, output=10),
+    )
+    unpriced = run_eval(
+        dataset([answerable_case()]),
+        FakeModel([correct_draft()], usage=Usage(input_tokens=10, output_tokens=5)),
+        model_label="x",
+    )
+
+    assert (silent.usage(), silent.cost()) == (None, None)
+    assert unpriced.cost() is None
+    assert "tokens" not in render_summary(silent)
+    assert "$" not in render_summary(unpriced)
 
 
 def test_report_round_trips_through_json() -> None:

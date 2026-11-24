@@ -36,13 +36,26 @@ class GenerationStatus(StrEnum):
     INVALID = "invalid"
 
 
+class Usage(BaseModel):
+    """Tokens billed for one model call, as reported by the provider."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+
+
 class Generation[OutputT: BaseModel](BaseModel):
-    """Outcome of a model call: the parsed output, or the reason there is none."""
+    """Outcome of a model call: the parsed output, or the reason there is none.
+
+    ``usage`` is optional so that a model that cannot report it still fits.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     status: GenerationStatus
     output: OutputT | None = None
+    usage: Usage | None = None
 
     @model_validator(mode="after")
     def _output_present_only_when_completed(self) -> "Generation[OutputT]":

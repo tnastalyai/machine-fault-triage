@@ -7,7 +7,7 @@ import anthropic
 import httpx2
 import pytest
 
-from machine_fault_triage import GenerationRequest, GenerationStatus, UntrustedBlock
+from machine_fault_triage import GenerationRequest, GenerationStatus, UntrustedBlock, Usage
 from machine_fault_triage.adapters.claude import ClaudeModel, Effort
 from machine_fault_triage.drafts import DraftTriage
 from machine_fault_triage.errors import ModelCallError
@@ -49,7 +49,7 @@ class FakeApi:
                 ],
                 "stop_reason": self._stop_reason,
                 "stop_sequence": None,
-                "usage": {"input_tokens": 10, "output_tokens": 5},
+                "usage": {"input_tokens": 10, "output_tokens": 5, "cache_read_input_tokens": 90},
             },
         )
 
@@ -71,6 +71,7 @@ def test_schema_valid_answer_is_returned_as_the_requested_type() -> None:
 
     assert generation.status is GenerationStatus.COMPLETED
     assert generation.output == draft
+    assert generation.usage == Usage(input_tokens=100, output_tokens=5)
 
 
 def test_instructions_go_to_the_system_prompt_and_evidence_to_the_user_message() -> None:
@@ -131,6 +132,7 @@ def test_answer_without_usable_output_is_reported_through_the_status(
 
     assert generation.status is status
     assert generation.output is None
+    assert generation.usage == Usage(input_tokens=100, output_tokens=5)
 
 
 def test_failed_api_call_is_raised_as_a_library_error() -> None:

@@ -13,6 +13,7 @@ from machine_fault_triage.evals.compare import Comparison, MetricDelta, compare_
 from machine_fault_triage.evals.report import (
     CaseOutcome,
     MetricSummary,
+    Pricing,
     RepeatOutcome,
     RunReport,
     summarize,
@@ -32,6 +33,7 @@ __all__ = [
     "Metric",
     "MetricDelta",
     "MetricSummary",
+    "Pricing",
     "RepeatOutcome",
     "RunReport",
     "compare_runs",

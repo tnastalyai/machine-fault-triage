@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from machine_fault_triage.cli import main
-from machine_fault_triage.evals import Metric, RunReport
+from machine_fault_triage.evals import Metric, Pricing, RunReport
 from tests.evals.factories import CASE_TOML, write_dataset
 
 CORRECT = "tests.evals.factories:correct_model"
@@ -63,6 +63,30 @@ def test_report_path_that_cannot_be_created_is_a_usage_error(
 
     assert exit_code == 2
     assert "cannot write a report" in capsys.readouterr().err
+
+
+def test_price_is_recorded_in_the_report(tmp_path: Path) -> None:
+    out = tmp_path / "run.json"
+    arguments = ["--dataset", str(write_dataset(tmp_path / "tiny")), "--model", CORRECT]
+
+    exit_code = main(["eval", "run", *arguments, "--price", "2", "10", "--out", str(out)])
+
+    report = RunReport.model_validate_json(out.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert report.pricing == Pricing(input=2, output=10)
+
+
+def test_negative_price_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    arguments = ["--dataset", str(write_dataset(tmp_path / "tiny")), "--model", CORRECT]
+
+    exit_code = main(
+        ["eval", "run", *arguments, "--price", "-1", "10", "--out", str(tmp_path / "run.json")]
+    )
+
+    assert exit_code == 2
+    assert "a price cannot be negative" in capsys.readouterr().err
 
 
 def test_label_overrides_the_model_name_in_the_report(tmp_path: Path) -> None:

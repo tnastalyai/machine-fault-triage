@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - Evaluation harness: a TOML case format, metrics computed in code, repeated runs with a per-metric summary, and a paired comparison of two runs.
 - `machine-fault-triage eval run` and `eval compare` commands.
+- `Usage` on `Generation`: adapters report the tokens of each call, and an evaluation report totals them, times every run and prices them with `--price`.
 - A seed dataset with two fictional devices and fifteen cases, including prompt-injection attempts.
 - `machine_fault_triage.adapters.claude.ClaudeModel`, installed with the `anthropic` extra.
 - `run_triage`: a baseline run that puts all supplied evidence into one model call and verifies the answer.

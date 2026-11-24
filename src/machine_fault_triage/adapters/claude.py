@@ -13,6 +13,7 @@ from machine_fault_triage.ports import (
     GenerationRequest,
     GenerationStatus,
     UntrustedBlock,
+    Usage,
 )
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
@@ -69,16 +70,17 @@ class ClaudeModel:
         except anthropic.APIError as error:
             message_text = f"the Claude API call failed: {error}"
             raise ModelCallError(message_text) from error
+        usage = _usage(message.usage)
         if message.stop_reason == "refusal":
-            return Generation[OutputT](status=GenerationStatus.REFUSED)
+            return Generation[OutputT](status=GenerationStatus.REFUSED, usage=usage)
         if message.stop_reason == "max_tokens":
-            return Generation[OutputT](status=GenerationStatus.TRUNCATED)
+            return Generation[OutputT](status=GenerationStatus.TRUNCATED, usage=usage)
         text = "".join(block.text for block in message.content if block.type == "text")
         try:
             output = output_type.model_validate_json(text)
         except ValidationError:
-            return Generation[OutputT](status=GenerationStatus.INVALID)
-        return Generation[OutputT](status=GenerationStatus.COMPLETED, output=output)
+            return Generation[OutputT](status=GenerationStatus.INVALID, usage=usage)
+        return Generation[OutputT](status=GenerationStatus.COMPLETED, output=output, usage=usage)
 
     def _output_config(self, output_type: type[BaseModel]) -> OutputConfigParam:
         config: OutputConfigParam = {
@@ -87,6 +89,11 @@ class ClaudeModel:
         if self._effort is not None:
             config["effort"] = self._effort
         return config
+
+
+def _usage(usage: anthropic.types.Usage) -> Usage:
+    cached = (usage.cache_creation_input_tokens or 0) + (usage.cache_read_input_tokens or 0)
+    return Usage(input_tokens=usage.input_tokens + cached, output_tokens=usage.output_tokens)
 
 
 def _evidence(blocks: tuple[UntrustedBlock, ...], boundary: str) -> list[TextBlockParam]:

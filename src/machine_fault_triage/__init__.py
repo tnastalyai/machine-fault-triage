@@ -23,6 +23,7 @@ from machine_fault_triage.ports import (
     HistoryProvider,
     StructuredModel,
     UntrustedBlock,
+    Usage,
 )
 
 __all__ = [
@@ -49,5 +50,6 @@ __all__ = [
     "TriageResult",
     "TriageStatus",
     "UntrustedBlock",
+    "Usage",
     "run_triage",
 ]
