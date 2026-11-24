@@ -63,7 +63,9 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-markers --strict-config -ra"
+addopts = "--strict-markers --strict-config --import-mode=importlib -ra"
+xfail_strict = true
+filterwarnings = ["error"]
 
 [tool.coverage.run]
 source = ["machine_fault_triage"]
