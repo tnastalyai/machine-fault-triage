@@ -100,7 +100,7 @@ uv run machine-fault-triage eval run --dataset datasets/seed \
 uv run machine-fault-triage eval compare runs/baseline.json runs/sonnet.json
 ```
 
-`--model` takes any `module:callable` that returns a `StructuredModel`; the Claude adapter reads its credentials from the environment and calls a paid API. [`datasets/seed`](datasets/seed) holds two fictional devices and fifteen cases, three of them prompt-injection attempts. It is a first signal, too small to rank models that are close to each other.
+`--model` takes any `module:callable` that returns a `StructuredModel`. Adapters for Claude and for the OpenAI Responses API ship as the `anthropic` and `openai` extras; both read credentials from the environment and call paid APIs. [`datasets/seed`](datasets/seed) holds two fictional devices and fifteen cases, three of them prompt-injection attempts. It is a first signal, too small to rank models that are close to each other.
 
 ## Limitations
 

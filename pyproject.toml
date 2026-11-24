@@ -30,6 +30,9 @@ Issues = "https://github.com/tnastalyai/machine-fault-triage/issues"
 anthropic = [
     "anthropic>=2.14.0",
 ]
+openai = [
+    "openai>=3.59.0",
+]
 
 [dependency-groups]
 dev = [

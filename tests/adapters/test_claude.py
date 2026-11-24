@@ -148,8 +148,11 @@ def test_client_is_created_from_the_environment_by_default(
     assert isinstance(ClaudeModel("claude-test"), ClaudeModel)
 
 
-def test_core_package_does_not_import_the_provider_sdk() -> None:
-    script = "import sys, machine_fault_triage.cli; sys.exit('anthropic' in sys.modules)"
+def test_core_package_does_not_import_a_provider_sdk() -> None:
+    script = (
+        "import sys, machine_fault_triage.cli;"
+        "sys.exit('anthropic' in sys.modules or 'openai' in sys.modules)"
+    )
 
     completed = subprocess.run([sys.executable, "-c", script], check=False)  # noqa: S603
 
