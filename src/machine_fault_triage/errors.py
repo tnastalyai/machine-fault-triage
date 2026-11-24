@@ -15,3 +15,7 @@ class DatasetError(TriageError):
 
 class IncomparableRunsError(TriageError):
     """Two evaluation runs cannot be compared because they used different datasets."""
+
+
+class ModelCallError(TriageError):
+    """A model adapter could not get an answer from its provider."""

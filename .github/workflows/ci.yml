@@ -24,7 +24,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --locked
+      - run: uv sync --locked --all-extras
       - run: uv run ruff format --check
       - run: uv run ruff check
       - run: uv run mypy
@@ -37,5 +37,5 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
-      - run: uv sync --resolution lowest-direct
+      - run: uv sync --all-extras --resolution lowest-direct
       - run: uv run --no-sync pytest
