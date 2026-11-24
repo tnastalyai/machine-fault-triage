@@ -9,6 +9,7 @@ from machine_fault_triage.evals.cases import (
     ExpectedHistoryEvidence,
     load_dataset,
 )
+from machine_fault_triage.evals.scoring import Metric, score
 
 __all__ = [
     "Dataset",
@@ -17,5 +18,7 @@ __all__ = [
     "ExpectedDocumentEvidence",
     "ExpectedEvidence",
     "ExpectedHistoryEvidence",
+    "Metric",
     "load_dataset",
+    "score",
 ]
