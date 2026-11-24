@@ -1,0 +1,17 @@
+id = "sp-p11-low-flow"
+category = "code_in_manual"
+documents = ["drennik-ts2400-manual"]
+
+[report]
+description = "Halfway through the field the terminal started beeping with P11 and the application rate dropped. Tank is still half full."
+language = "en"
+
+[expect]
+status = "ok"
+cause_terms = [["suction filter", "flow meter", "flowmeter"]]
+
+[[expect.evidence]]
+type = "document"
+document_id = "drennik-ts2400-manual"
+page = 22
+anchor = "P11"

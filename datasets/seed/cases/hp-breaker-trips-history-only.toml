@@ -1,0 +1,27 @@
+id = "hp-breaker-trips-history-only"
+category = "history_only"
+
+[report]
+description = "The circuit breaker for the heat pump trips a few minutes after I switch it back on. Nothing is shown on the display because it has no power."
+language = "en"
+
+[[records]]
+id = "visit-2031"
+recorded_on = 2026-01-19
+scope = "model"
+summary = "Breaker tripped shortly after power-up, display dark. Insulation test showed the compressor crankcase heater shorted to earth. Heater replaced, unit ran normally."
+parts_replaced = ["Crankcase heater"]
+
+[[records]]
+id = "visit-1984"
+recorded_on = 2026-10-02
+scope = "device"
+summary = "Annual inspection. Strainer cleaned, no faults found."
+
+[expect]
+status = "ok"
+cause_terms = [["crankcase heater"]]
+
+[[expect.evidence]]
+type = "history"
+record_id = "visit-2031"

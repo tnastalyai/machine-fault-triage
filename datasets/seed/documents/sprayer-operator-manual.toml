@@ -1,0 +1,91 @@
+id = "drennik-ts2400-manual"
+title = "Drennik TS-2400 trailed field sprayer: operator and service manual"
+
+[[pages]]
+number = 5
+text = """
+1 Safety
+
+1.1 Chemical residue
+Every part of the liquid system can carry crop protection chemicals. Wear chemical-resistant gloves, eye protection and coveralls for any work on the pump, filters, valves and nozzles. Rinse the system with clean water from the rinse tank before opening it.
+
+1.2 Pressure
+Lines stay pressurised after the pump stops. Open the pressure relief valve and check that the gauge reads zero before loosening any fitting.
+
+1.3 PTO shaft
+Disengage the PTO, stop the tractor engine and remove the key before working on the pump. Never work on a rotating shaft.
+"""
+
+[[pages]]
+number = 11
+text = """
+3 Pump and pressure system
+
+3.1 Pump
+The TS-2400 uses a six-diaphragm pump driven by the PTO at 540 rpm, delivering 250 l/min. The pump crankcase is filled with 1.6 l of oil, visible in the sight glass.
+
+3.2 Pulsation damper
+The pulsation damper on the pump outlet smooths pressure peaks. Its air pre-charge must be 2 bar for working pressures of 3 to 5 bar. Check it with a tyre gauge at the valve on top of the damper, with the pump stopped.
+
+3.3 Suction filter
+The suction filter has a 50 mesh insert. A blocked insert starves the pump and reduces the flow to the boom.
+"""
+
+[[pages]]
+number = 16
+text = """
+4 Boom, section valves and nozzles
+
+4.1 Sections
+The 24 m boom is divided into seven sections. Each section has a motorised valve with a position feedback contact.
+
+4.2 Nozzles
+Replace a nozzle when its output differs by more than 10 percent from a new nozzle of the same size. Measure with a calibration jug for 60 seconds at 3 bar.
+
+4.3 Line filters
+Each section has a 100 mesh line filter. Clean all line filters after each spraying day.
+"""
+
+[[pages]]
+number = 22
+text = """
+6 Controller fault codes
+
+P04: pressure sensor signal below 0.5 V. Check the sensor plug at the manifold and the 5 V supply on pin 1.
+
+P11: measured flow below 80 percent of the target rate for 10 s. Clean the suction filter insert, then check the flow meter turbine for deposits.
+
+H07: left and right boom height sensors disagree by more than 40 cm for 5 s. Clean the ultrasonic sensor faces and check both sensor connectors for corrosion.
+
+H15: hydraulic oil temperature above 85 degrees C. Check the oil cooler fins for chaff.
+
+T02: tank level sensor reading implausible. Recalibrate the level sensor with an empty tank.
+"""
+
+[[pages]]
+number = 23
+text = """
+7 Faults without a code
+
+7.1 Pulsating pressure gauge
+A gauge needle that swings with every pump stroke means the pulsation damper has lost its pre-charge. Re-charge it to 2 bar. If it will not hold pressure, the damper diaphragm is torn.
+
+7.2 Milky pump oil
+Oil in the sight glass that turns milky or white means spray liquid has entered the crankcase through a ruptured pump diaphragm. Stop the pump at once. Replace all six diaphragms and change the oil. The oil is contaminated with chemicals: wear gloves and dispose of it as hazardous waste.
+
+7.3 Streaks in the spray pattern
+Streaks behind single nozzles are caused by worn or partly blocked nozzles. See 4.2.
+"""
+
+[[pages]]
+number = 34
+text = """
+10 Spare parts
+
+DK-2101  Pump diaphragm set (6 pieces)
+DK-2107  Pulsation damper diaphragm
+DK-2230  Suction filter insert, 50 mesh
+DK-3302  Flow meter turbine
+DK-4410  Ultrasonic boom height sensor
+DK-4502  Pressure sensor, 0 to 10 bar
+"""

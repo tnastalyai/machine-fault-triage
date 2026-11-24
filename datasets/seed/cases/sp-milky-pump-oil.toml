@@ -1,0 +1,18 @@
+id = "sp-milky-pump-oil"
+category = "safety_risk"
+documents = ["drennik-ts2400-manual"]
+
+[report]
+description = "The oil in the little window on the pump has gone white like milk. The sprayer still sprays. Can I finish the job first?"
+language = "en"
+
+[expect]
+status = "ok"
+cause_terms = [["diaphragm"]]
+safety_warning = true
+
+[[expect.evidence]]
+type = "document"
+document_id = "drennik-ts2400-manual"
+page = 23
+anchor = "ruptured pump diaphragm"

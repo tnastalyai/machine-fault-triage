@@ -1,0 +1,9 @@
+id = "sp-code-without-documents"
+category = "no_documents"
+
+[report]
+description = "Terminal shows T02."
+language = "en"
+
+[expect]
+status = "not_enough_data"

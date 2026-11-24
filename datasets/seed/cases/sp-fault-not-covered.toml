@@ -1,0 +1,10 @@
+id = "sp-fault-not-covered"
+category = "no_basis"
+documents = ["drennik-ts2400-manual"]
+
+[report]
+description = "When I fold the boom, the left wing comes in much slower than the right one and stops halfway."
+language = "en"
+
+[expect]
+status = "not_enough_data"

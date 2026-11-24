@@ -1,0 +1,17 @@
+id = "hp-ice-in-base-tray"
+category = "symptom_without_code"
+documents = ["velmora-aw90-service-manual"]
+
+[report]
+description = "There is a thick block of ice in the bottom of the outdoor unit, under the fins. It grows every night. No error on the display and the house is warm."
+language = "en"
+
+[expect]
+status = "ok"
+cause_terms = [["drain", "tray heater", "EH2"]]
+
+[[expect.evidence]]
+type = "document"
+document_id = "velmora-aw90-service-manual"
+page = 19
+anchor = "base tray"

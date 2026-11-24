@@ -1,0 +1,17 @@
+id = "sp-pulsating-gauge"
+category = "symptom_without_code"
+documents = ["drennik-ts2400-manual"]
+
+[report]
+description = "The needle of the pressure gauge jumps up and down in time with the pump and the hoses shake. No fault on the terminal."
+language = "en"
+
+[expect]
+status = "ok"
+cause_terms = [["damper"]]
+
+[[expect.evidence]]
+type = "document"
+document_id = "drennik-ts2400-manual"
+page = 23
+anchor = "pulsation damper"

@@ -1,0 +1,10 @@
+id = "hp-unknown-code"
+category = "code_not_in_manual"
+documents = ["velmora-aw90-service-manual"]
+
+[report]
+description = "The display shows E88. That is all I can tell you."
+language = "en"
+
+[expect]
+status = "not_enough_data"

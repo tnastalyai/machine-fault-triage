@@ -1,0 +1,109 @@
+id = "velmora-aw90-service-manual"
+title = "Velmora AW-90 air-to-water heat pump: service manual"
+
+[[pages]]
+number = 3
+text = """
+1 Safety
+
+1.1 Refrigerant
+The AW-90 is charged with 0.9 kg of R290 (propane). R290 is flammable. Work on the refrigerant circuit may only be carried out by a technician certified for flammable refrigerants. Keep ignition sources at least 3 m away from the unit while the circuit is open. Never vent refrigerant to the atmosphere.
+
+1.2 Electrical
+The outdoor unit is supplied with 400 V three-phase mains. Isolate the supply at the local isolator and wait 5 minutes for the inverter capacitors to discharge before removing the electrical cover. Verify the absence of voltage with a two-pole tester.
+
+1.3 Pressure
+The high pressure side can reach 31 bar. Do not bridge or adjust pressure switches. A pressure switch that has tripped must be investigated, not bypassed.
+"""
+
+[[pages]]
+number = 8
+text = """
+3 Hydraulic circuit
+
+3.1 Flow rate
+Nominal water flow is 26 l/min. The minimum permitted flow is 14 l/min. Below this value the flow switch FS1 opens and the controller stops the compressor.
+
+3.2 Strainer
+A 0.6 mm mesh strainer is fitted on the return pipe, upstream of the plate heat exchanger. A blocked strainer is the most common reason for low flow in the first heating season, because installation debris collects there.
+
+3.3 Circulation pump
+The circulation pump P1 is speed controlled by a PWM signal from the indoor controller. With no PWM signal the pump runs at full speed.
+
+3.4 Air
+Air in the circuit causes unstable flow readings. Vent the system at the automatic air vent above the plate heat exchanger and at the highest radiator.
+"""
+
+[[pages]]
+number = 12
+text = """
+5 Controller
+
+5.1 Display
+The indoor controller shows the flow temperature during normal operation. When a fault is active the display alternates between the flow temperature and the fault code.
+
+5.2 Status LED on the outdoor board
+Steady green: standby. Flashing green: compressor running. Flashing amber: defrost. Steady red: fault lock-out, see section 6.
+
+5.3 Reset
+Faults marked "auto" clear when the cause disappears. Faults marked "manual" need a reset: hold the OK key for 5 seconds. Three manual resets within 24 hours block further resets until the supply has been switched off and on.
+"""
+
+[[pages]]
+number = 14
+text = """
+6 Fault codes
+
+6.1 A codes: hydraulic and refrigerant circuit
+
+A12 (auto): flow switch FS1 open for more than 15 s while circulation pump P1 is running. Clean the strainer, vent the circuit, then check that P1 is turning. Replace FS1 only if the measured flow is above 14 l/min and the switch stays open.
+
+A17 (auto): outdoor coil sensor T3 out of range (open or short circuit). Measure the sensor at connector X7: 10 kOhm at 25 degrees C. Replace the sensor if the reading is outside 8 to 12 kOhm at room temperature.
+
+A21 (manual): high pressure switch HP1 tripped three times within 60 minutes. Check the water flow first, then the condition of the plate heat exchanger. Do not reset repeatedly without finding the cause.
+
+A26 (auto): defrost not completed within 12 minutes. Check that the outdoor coil is free of leaves and that coil sensor T3 is clipped to the lowest coil bend.
+"""
+
+[[pages]]
+number = 15
+text = """
+6.2 C codes: electrical and compressor
+
+C03 (auto): no communication between indoor controller and outdoor board for 30 s. Check the two-core bus cable at terminals A and B on both ends. The cable must be shielded and no longer than 50 m.
+
+C08 (manual): phase sequence wrong or one phase missing at the outdoor unit. Measure all three phases at terminal block X1. If all phases are present, swap L1 and L2 at the isolator. This fault typically appears after electrical work on the building supply.
+
+C14 (manual): compressor discharge temperature above 115 degrees C. Usual causes are low refrigerant charge or an expansion valve EEV1 that does not open. Check the superheat before adding refrigerant.
+"""
+
+[[pages]]
+number = 19
+text = """
+7 Faults without a code
+
+7.1 Ice in the base tray
+Ice building up in the base tray below the outdoor coil, with no fault code, means that defrost water cannot drain. Check that the condensate drain hole is clear and that the base tray heater EH2 draws current: 0.35 A at 230 V. Replace EH2 if it draws no current.
+
+7.2 Unit runs but the flow temperature does not rise
+If the compressor runs and the display shows no code, check whether the four-way valve Y1 has switched: the pipe to the plate heat exchanger must be hot in heating mode. A valve stuck in the defrost position is recognised by a cold plate heat exchanger and a warm outdoor coil.
+
+7.3 Humming indoor unit
+A hum that changes with pump speed points to air in the circulation pump P1. Vent as described in 3.4.
+"""
+
+[[pages]]
+number = 27
+text = """
+9 Spare parts
+
+VM-1108  Flow switch FS1
+VM-1120  Strainer insert 0.6 mm
+VM-2204  Outdoor coil sensor T3, 10 kOhm
+VM-2310  High pressure switch HP1, 31 bar
+VM-3015  Base tray heater EH2, 80 W
+VM-3102  Four-way valve Y1 with coil
+VM-3140  Electronic expansion valve EEV1
+VM-4001  Outdoor board
+VM-4410  Circulation pump P1
+"""

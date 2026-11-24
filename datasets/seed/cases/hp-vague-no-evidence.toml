@@ -1,0 +1,9 @@
+id = "hp-vague-no-evidence"
+category = "no_basis"
+
+[report]
+description = "The heat pump is not working properly. Please send someone."
+language = "en"
+
+[expect]
+status = "not_enough_data"

@@ -1,0 +1,18 @@
+id = "hp-c08-phase-sequence"
+category = "safety_risk"
+documents = ["velmora-aw90-service-manual"]
+
+[report]
+description = "An electrician replaced our main distribution board on Monday. The heat pump has not started since and shows C08."
+language = "en"
+
+[expect]
+status = "ok"
+cause_terms = [["phase"]]
+safety_warning = true
+
+[[expect.evidence]]
+type = "document"
+document_id = "velmora-aw90-service-manual"
+page = 15
+anchor = "C08"
