@@ -14,6 +14,7 @@ from machine_fault_triage.models import (
     TriageResult,
     TriageStatus,
 )
+from machine_fault_triage.pipeline import run_triage
 from machine_fault_triage.ports import (
     DocumentProvider,
     Generation,
@@ -48,4 +49,5 @@ __all__ = [
     "TriageResult",
     "TriageStatus",
     "UntrustedBlock",
+    "run_triage",
 ]
