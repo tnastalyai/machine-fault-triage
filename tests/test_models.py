@@ -6,17 +6,17 @@ from pydantic import ValidationError
 from machine_fault_triage import (
     Cause,
     Confidence,
-    DocumentSource,
+    DocumentCitation,
     EvidenceLevel,
+    HistoryCitation,
     HistoryScope,
-    HistorySource,
     TriageResult,
     TriageStatus,
 )
 
 
-def verified_quote() -> DocumentSource:
-    return DocumentSource(
+def verified_quote() -> DocumentCitation:
+    return DocumentCitation(
         document_id="manual-1",
         document_title="Service manual",
         page=77,
@@ -25,15 +25,18 @@ def verified_quote() -> DocumentSource:
     )
 
 
-def unverified_quote() -> DocumentSource:
-    return DocumentSource(
+def unverified_quote() -> DocumentCitation:
+    return DocumentCitation(
         document_id="manual-1", document_title="Service manual", page=77, quote="E7: flow sensor"
     )
 
 
-def service_record() -> HistorySource:
-    return HistorySource(
-        record_id="order-9", recorded_on=date(2026, 3, 11), scope=HistoryScope.DEVICE
+def service_record() -> HistoryCitation:
+    return HistoryCitation(
+        record_id="order-9",
+        recorded_on=date(2026, 3, 11),
+        scope=HistoryScope.DEVICE,
+        verified=True,
     )
 
 
@@ -42,7 +45,7 @@ def grounded_cause() -> Cause:
         title="Flow sensor fault",
         confidence=Confidence.HIGH,
         why="The manual maps E7 to the flow sensor.",
-        sources=(verified_quote(),),
+        citations=(verified_quote(),),
     )
 
 
@@ -50,12 +53,12 @@ def test_cause_backed_by_a_verified_quote_is_grounded() -> None:
     assert grounded_cause().is_grounded
 
 
-def test_cause_backed_by_a_service_record_is_grounded() -> None:
+def test_cause_backed_by_a_verified_service_record_is_grounded() -> None:
     cause = Cause(
         title="Flow sensor fault",
         confidence=Confidence.MEDIUM,
         why="The same fault was repaired before.",
-        sources=(service_record(),),
+        citations=(service_record(),),
     )
 
     assert cause.is_grounded
@@ -66,7 +69,7 @@ def test_cause_with_only_an_unverified_quote_is_not_grounded() -> None:
         title="Flow sensor fault",
         confidence=Confidence.LOW,
         why="Quoted text could not be found in the manual.",
-        sources=(unverified_quote(),),
+        citations=(unverified_quote(),),
     )
 
     assert not cause.is_grounded
@@ -148,7 +151,7 @@ def test_result_round_trips_through_json() -> None:
                 title="Flow sensor fault",
                 confidence=Confidence.HIGH,
                 why="Manual and history agree.",
-                sources=(verified_quote(), service_record()),
+                citations=(verified_quote(), service_record()),
             ),
         ),
     )
@@ -158,7 +161,7 @@ def test_result_round_trips_through_json() -> None:
 
 def test_unknown_fields_are_rejected() -> None:
     with pytest.raises(ValidationError):
-        DocumentSource.model_validate(
+        DocumentCitation.model_validate(
             {
                 "document_id": "manual-1",
                 "document_title": "Service manual",

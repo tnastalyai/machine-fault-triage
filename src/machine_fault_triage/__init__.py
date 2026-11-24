@@ -2,26 +2,26 @@
 
 from machine_fault_triage.models import (
     Cause,
+    Citation,
     Confidence,
-    DocumentSource,
+    DocumentCitation,
     ErrorCode,
     EvidenceLevel,
+    HistoryCitation,
     HistoryScope,
-    HistorySource,
-    Source,
     TriageResult,
     TriageStatus,
 )
 
 __all__ = [
     "Cause",
+    "Citation",
     "Confidence",
-    "DocumentSource",
+    "DocumentCitation",
     "ErrorCode",
     "EvidenceLevel",
+    "HistoryCitation",
     "HistoryScope",
-    "HistorySource",
-    "Source",
     "TriageResult",
     "TriageStatus",
 ]

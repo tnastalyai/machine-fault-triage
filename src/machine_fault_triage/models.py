@@ -44,7 +44,7 @@ class _Model(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
-class DocumentSource(_Model):
+class DocumentCitation(_Model):
     """A quote from a document page that supports a cause."""
 
     type: Literal["document"] = "document"
@@ -56,16 +56,17 @@ class DocumentSource(_Model):
     verified: bool = False
 
 
-class HistorySource(_Model):
+class HistoryCitation(_Model):
     """A past service record that supports a cause."""
 
     type: Literal["history"] = "history"
     record_id: str = Field(min_length=1)
     recorded_on: date
     scope: HistoryScope
+    verified: bool = False
 
 
-Source = Annotated[DocumentSource | HistorySource, Field(discriminator="type")]
+Citation = Annotated[DocumentCitation | HistoryCitation, Field(discriminator="type")]
 
 
 class ErrorCode(_Model):
@@ -86,17 +87,17 @@ class Cause(_Model):
     why: str = Field(min_length=1)
     checks: tuple[str, ...] = ()
     fix: str | None = None
-    sources: tuple[Source, ...] = ()
+    citations: tuple[Citation, ...] = ()
 
     @property
     def is_grounded(self) -> bool:
-        """Whether a verified document quote or a service record backs the cause."""
-        return any(isinstance(source, HistorySource) or source.verified for source in self.sources)
+        """Whether at least one citation was verified against the evidence."""
+        return any(citation.verified for citation in self.citations)
 
     @model_validator(mode="after")
     def _ungrounded_cause_has_low_confidence(self) -> Self:
         if not self.is_grounded and self.confidence is not Confidence.LOW:
-            message = "a cause without a verified source must have low confidence"
+            message = "a cause without a verified citation must have low confidence"
             raise ValueError(message)
         return self
 
