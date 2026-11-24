@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
-- Result models for a triage run: status, evidence level, causes with document and history sources, error code, parts, safety warnings and questions for the customer.
-- Document sources name the document, page, section and quoted text so a technician can check the evidence.
-- A cause without a verified source is limited to low confidence by the model itself.
+- `run_triage`: a baseline run that puts all supplied evidence into one model call and verifies the answer.
+- Citation verification: document quotes are checked against the cited page, history citations against the supplied records. Unsupported causes are reduced to low confidence.
+- Ports for plugging in a model, a document source and service history: `StructuredModel`, `DocumentProvider`, `HistoryProvider`.
+- Untrusted text is passed to the model separately from instructions.
+- `machine_fault_triage.testing.FakeModel`, a scripted model for tests and offline examples.
+- Result models: status, evidence level, causes with document and history citations, error code, parts, safety warnings and questions for the customer.
