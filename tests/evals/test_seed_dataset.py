@@ -1,7 +1,7 @@
 from collections import Counter
 from pathlib import Path
 
-from machine_fault_triage import TriageStatus
+from machine_fault_triage import FaultReport, TriageStatus
 from machine_fault_triage.drafts import (
     DraftCause,
     DraftCitation,
@@ -75,9 +75,9 @@ def test_seed_dataset_covers_both_devices_and_the_planned_categories() -> None:
     dataset = load_dataset(SEED)
 
     categories = Counter(case.category for case in dataset.cases)
-    assert len(dataset.cases) == 22
+    assert len(dataset.cases) == 26
     assert categories["two_problems"] == 2
-    assert categories["model_variant"] == 4
+    assert categories["model_variant"] == categories["model_variant_table"] == 4
     assert {case.id.split("-")[0] for case in dataset.cases} == {"hp", "sp"}
     assert {"injection_report", "injection_document", "injection_history"} <= set(categories)
     assert sum(case.expect.status is TriageStatus.NOT_ENOUGH_DATA for case in dataset.cases) == 5
@@ -125,9 +125,11 @@ def test_model_that_always_abstains_only_passes_the_abstention_cases() -> None:
 
 def test_model_variant_cases_come_in_pairs_that_differ_only_in_the_model() -> None:
     dataset = load_dataset(SEED)
-    variants = [case for case in dataset.cases if case.category == "model_variant"]
+    variants = [case for case in dataset.cases if case.category.startswith("model_variant")]
 
-    by_report = Counter((case.report, case.documents) for case in variants)
-    assert set(by_report.values()) == {2}
-    assert len({case.device_model for case in variants}) == len(variants)
+    models: dict[FaultReport, set[str | None]] = {}
+    for case in variants:
+        models.setdefault(case.report, set()).add(case.device_model)
+    assert len(variants) == 2 * len(models)
+    assert all(len(pair) == 2 for pair in models.values())
     assert all(case.expect.other_models for case in variants)

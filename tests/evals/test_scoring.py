@@ -207,6 +207,14 @@ def test_value_of_another_model_anywhere_in_the_result_is_the_wrong_model() -> N
     assert scores_for(case, wrong)[Metric.RIGHT_MODEL] == 0
 
 
+def test_value_of_another_model_inside_a_quoted_table_row_is_not_held_against_the_answer() -> None:
+    case = answerable_case(device_model="AquaHeat 12 Compact", other_models=("flow sensor open",))
+
+    assert (
+        scores_for(case, draft_triage([draft_cause([manual_citation()])]))[Metric.RIGHT_MODEL] == 1
+    )
+
+
 def test_risky_repair_needs_a_safety_warning() -> None:
     case = answerable_case(safety_warning=True)
     silent = draft_triage([draft_cause([manual_citation()])])

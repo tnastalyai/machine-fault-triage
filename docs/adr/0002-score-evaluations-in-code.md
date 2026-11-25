@@ -38,5 +38,5 @@ A run repeats each case, because current models offer no deterministic mode. The
 - `top_cause` is a proxy. A correct cause in unexpected words scores 0, and a wrong cause that mentions the right component scores 1. Term groups are kept short and are paired with `expected_evidence` to limit both errors. A judging model, validated against human labels, will be added for this one question when the dataset is large enough to validate it.
 - No metric checks that the cited text supports the cause. That, too, needs a judge.
 - Cases written with the help of a language model share its blind spots. The dataset needs cases written by hand, and a control run on a model from another provider, before its numbers are published.
-- With twenty-two cases the standard errors are wide. The seed dataset can show that a change broke something. It cannot rank two models that are close.
+- With twenty-six cases the standard errors are wide. The seed dataset can show that a change broke something. It cannot rank two models that are close.
 - Every run is timed, and its token usage is kept when the model reports it. Prices are passed in by the caller and stored in the report, because the library does not track provider price lists.

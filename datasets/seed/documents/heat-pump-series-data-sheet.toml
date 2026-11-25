@@ -12,3 +12,17 @@ AW-60: fault A12 is raised when the flow rate stays below 11 l/min for 60 second
 AW-90: fault A12 is raised when the flow rate stays below 16 l/min for 60 seconds. Clean the strainer and set the circulation pump to stage 3.
 AW-120: fault A12 is raised when the flow rate stays below 23 l/min for 60 seconds. Clean the strainer and check that both circulation pumps run.
 """
+
+[[pages]]
+number = 5
+text = """
+5 Technical data
+
+Model AW-60 AW-90 AW-120
+Refrigerant charge kg 1.4 1.9 2.6
+Expansion vessel pre-charge bar 1.0 1.5 2.0
+Mains fuse A 16 20 25
+Safety valve opening pressure bar 3.0 3.0 3.0
+
+A system pressure that swings widely between a cold and a hot system points to an expansion vessel that has lost its pre-charge. Restore the pre-charge given in the table for the model, with the heating side drained to zero pressure.
+"""

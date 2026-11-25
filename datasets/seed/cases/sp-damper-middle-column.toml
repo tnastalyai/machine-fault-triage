@@ -1,0 +1,19 @@
+id = "sp-damper-middle-column"
+category = "model_variant_table"
+device_model = "Drennik TS-2400"
+documents = ["drennik-ts-series-data-sheet"]
+
+[report]
+description = "The pressure gauge needle jumps all the time while spraying. What should the damper be pumped up to?"
+language = "en"
+
+[expect]
+status = "ok"
+cause_terms = [["pulsation damper", "damper", "pre-charge"]]
+other_models = ["3.5 bar", "5.5 bar"]
+
+[[expect.evidence]]
+type = "document"
+document_id = "drennik-ts-series-data-sheet"
+page = 6
+anchor = "Pulsation damper pre-charge"

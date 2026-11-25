@@ -12,3 +12,16 @@ TS-1800: alarm P11 appears when the pump flow falls below 38 l/min at working sp
 TS-2400: alarm P11 appears when the pump flow falls below 52 l/min at working speed. Clean the suction filter, a 32 mesh insert.
 TS-3200: alarm P11 appears when the pump flow falls below 71 l/min at working speed. Clean both suction filters, each a 32 mesh insert.
 """
+
+[[pages]]
+number = 6
+text = """
+6 Technical data
+
+Model TS-1800 TS-2400 TS-3200
+Pump oil quantity l 1.2 1.8 2.4
+Pulsation damper pre-charge bar 3.5 4.0 5.5
+Tyre pressure bar 2.2 2.6 3.1
+
+A pressure gauge needle that jumps while spraying points to a pulsation damper with the wrong pre-charge. Set the pre-charge given in the table for the model, with the pump stopped.
+"""

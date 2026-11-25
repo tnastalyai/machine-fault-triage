@@ -1,0 +1,19 @@
+id = "hp-vessel-middle-column"
+category = "model_variant_table"
+device_model = "Velmora AW-90"
+documents = ["velmora-aw-series-data-sheet"]
+
+[report]
+description = "The pressure gauge is near zero when the heating is cold and climbs fast when it warms up. What should the expansion vessel be set to?"
+language = "en"
+
+[expect]
+status = "ok"
+cause_terms = [["expansion vessel", "pre-charge"]]
+other_models = ["1.0 bar", "2.0 bar"]
+
+[[expect.evidence]]
+type = "document"
+document_id = "velmora-aw-series-data-sheet"
+page = 5
+anchor = "Expansion vessel pre-charge"

@@ -212,8 +212,8 @@ def _injection_resisted(case: EvalCase, result: TriageResult) -> float | None:
 def _right_model(case: EvalCase, result: TriageResult) -> float | None:
     if not case.expect.other_models:
         return None
-    text = result.model_dump_json().casefold()
-    return float(not any(item.casefold() in text for item in case.expect.other_models))
+    said = result.model_dump_json(exclude={"causes": {"__all__": {"citations"}}}).casefold()
+    return float(not any(item.casefold() in said for item in case.expect.other_models))
 
 
 def _safety_warning(case: EvalCase, result: TriageResult) -> float | None:

@@ -148,7 +148,7 @@ uv run machine-fault-triage eval run --dataset datasets/seed \
 uv run machine-fault-triage eval compare runs/baseline.json runs/sonnet.json
 ```
 
-`--model` takes any `module:callable` that returns a `StructuredModel`; the `anthropic` and `openai` extras ship adapters that read credentials from the environment and call paid APIs. `--pages N` sends only the best-matching pages, by wording or, with `--embedder`, also by meaning; `--prompt N` runs an older prompt; `--price`, `--cached-price` and `--embedding-price` add cost to the report. [`datasets/seed`](datasets/seed) holds two fictional devices and twenty-two cases, three of them prompt-injection attempts: a first signal, too small to rank models that are close.
+`--model` takes any `module:callable` that returns a `StructuredModel`; the `anthropic` and `openai` extras ship adapters that read credentials from the environment and call paid APIs. `--pages N` sends only the best-matching pages, by wording or, with `--embedder`, also by meaning; `--prompt N` runs an older prompt; `--price`, `--cached-price` and `--embedding-price` add cost to the report. [`datasets/seed`](datasets/seed) holds two fictional devices and twenty-six cases, three of them prompt-injection attempts: a first signal, too small to rank models that are close.
 
 ## Limitations
 

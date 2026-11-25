@@ -60,8 +60,10 @@ class Expectation(_Spec):
     the evidence says nothing about: no cause may mention them, and the
     summary, the missing information or a question must.
 
-    ``other_models`` lists strings that only the rows of other models of the
-    device hold, such as their limit values. None may appear in the result.
+    ``other_models`` lists what the answer would say only if it read the
+    values of another model of the device, such as that model's limit with
+    its unit. None may appear in the result outside its quotes: a quoted
+    table row holds the values of every model.
     """
 
     status: TriageStatus
