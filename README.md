@@ -117,7 +117,7 @@ print(result.evidence_level, citation.document_title, citation.page, citation.ve
 manual AquaHeat 12 service manual 77 True
 ```
 
-The quote is on page 77, so the citation is verified. The cited service record `order-404` was never supplied, so that citation is dropped.
+The quote is on page 77, so the citation is verified. The cited service record `order-404` was never supplied, so that citation is dropped. `machine_fault_triage.render.render_text(result)` lays a result out as plain text for the technician, and `result.report_facts` holds the customer's report without the noise.
 
 ## Usage and cost
 
