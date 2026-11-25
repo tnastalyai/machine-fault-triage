@@ -42,7 +42,9 @@ class KeywordPageSelector:
         """Choose how many pages to keep at most, across all documents.
 
         With ``neighbours``, each chosen page brings that many pages before
-        and after it from the same document, counted within the limit. With
+        and after it from the same document, counted within the limit. That
+        helps when a table runs on to the next page, and costs places: with a
+        small limit the neighbours push out pages that matched. With
         ``splitter``, the pieces it cuts are ranked instead of whole pages,
         and a page is as good as its best piece; whole pages are still kept.
 
