@@ -2,9 +2,11 @@ import pytest
 
 from machine_fault_triage import (
     Confidence,
+    Document,
     DocumentCitation,
     EvidenceLevel,
     HistoryCitation,
+    Page,
     PageSource,
 )
 from machine_fault_triage.drafts import DraftDocumentCitation
@@ -15,6 +17,8 @@ from machine_fault_triage.grounding import (
     unsupported_figures,
 )
 from tests.factories import (
+    MANUAL_ID,
+    QUOTE,
     draft_cause,
     manual,
     manual_citation,
@@ -52,14 +56,65 @@ def test_quote_absent_from_the_page_is_kept_unverified_and_lowers_confidence() -
     assert cause.confidence is Confidence.LOW
 
 
-def test_quote_from_another_page_of_the_same_document_is_not_verified() -> None:
+def test_quote_found_on_another_page_is_verified_there_and_keeps_the_page_the_model_named() -> None:
     (cause,) = ground([draft_cause([manual_citation(page=76)])], [manual()], [])
 
-    assert not cause.citations[0].verified
+    (citation,) = cause.citations
+    assert isinstance(citation, DocumentCitation)
+    assert (citation.verified, citation.page, citation.cited_page) == (True, 77, 76)
+    assert cause.confidence is Confidence.HIGH
 
 
-def test_quote_citing_a_page_the_document_lacks_is_not_verified() -> None:
+def test_quote_on_the_cited_page_names_no_other_page() -> None:
+    (cause,) = ground([draft_cause([manual_citation()])], [manual()], [])
+
+    assert getattr(cause.citations[0], "cited_page", 0) is None
+
+
+def test_quote_citing_a_page_the_document_lacks_is_verified_where_it_stands() -> None:
     (cause,) = ground([draft_cause([manual_citation(page=500)])], [manual()], [])
+
+    (citation,) = cause.citations
+    assert isinstance(citation, DocumentCitation)
+    assert (citation.verified, citation.page, citation.cited_page) == (True, 77, 500)
+
+
+def test_short_quote_is_not_looked_for_on_other_pages() -> None:
+    (cause,) = ground(
+        [draft_cause([manual_citation(quote="E6: low pressure", page=76)])], [manual()], []
+    )
+
+    (citation,) = cause.citations
+    assert isinstance(citation, DocumentCitation)
+    assert (citation.verified, citation.page, citation.cited_page) == (False, 76, None)
+
+
+def test_quote_repeated_on_several_pages_is_placed_on_the_nearest_and_then_the_earlier() -> None:
+    warning = "Isolate the unit from the mains before opening"
+    repeated = Document(
+        id=MANUAL_ID,
+        title="Service manual",
+        pages=tuple(
+            Page(number=number, text=warning if number in {2, 6, 9} else "Contents")
+            for number in range(1, 10)
+        ),
+    )
+
+    pages = [
+        ground([draft_cause([manual_citation(quote=warning, page=cited)])], [repeated], [])[0]
+        .citations[0]
+        .model_dump()["page"]
+        for cited in (1, 4, 8)
+    ]
+
+    assert pages == [2, 2, 9]
+
+
+def test_quote_from_another_document_is_not_moved_to_it() -> None:
+    other = Document(id="other-manual", title="Other", pages=(Page(number=1, text=QUOTE),))
+    lacking = Document(id=MANUAL_ID, title="Manual", pages=(Page(number=1, text="Contents"),))
+
+    (cause,) = ground([draft_cause([manual_citation(page=1)])], [lacking, other], [])
 
     assert not cause.citations[0].verified
 

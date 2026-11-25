@@ -67,7 +67,17 @@ def test_correct_grounded_answer_scores_one_on_every_applicable_metric() -> None
         Metric.TOP_CAUSE: 1,
         Metric.EXPECTED_EVIDENCE: 1,
         Metric.CITATIONS_VERIFIED: 1,
+        Metric.CITED_PAGE_RIGHT: 1,
     }
+
+
+def test_quote_the_model_placed_on_the_wrong_page_counts_against_the_cited_page() -> None:
+    draft = draft_triage([draft_cause([manual_citation(), manual_citation(page=76)])])
+
+    scores = scores_for(answerable_case(), draft)
+
+    assert scores[Metric.CITATIONS_VERIFIED] == 1
+    assert scores[Metric.CITED_PAGE_RIGHT] == pytest.approx(0.5)
 
 
 def test_abstaining_on_an_answerable_case_fails_the_answer_metrics() -> None:

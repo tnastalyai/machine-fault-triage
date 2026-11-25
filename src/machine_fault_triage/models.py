@@ -64,6 +64,8 @@ class DocumentCitation(_Model):
     verified: bool = False
     source: PageSource = PageSource.TEXT_LAYER
     """``ocr`` when the cited page was recognised from an image and may hold misreads."""
+    cited_page: int | None = Field(default=None, ge=1)
+    """The page the model named, when the quote was found on another page of the document."""
 
 
 class HistoryCitation(_Model):

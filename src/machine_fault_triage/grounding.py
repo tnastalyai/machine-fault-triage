@@ -4,7 +4,7 @@ import re
 from collections.abc import Iterable, Sequence
 
 from machine_fault_triage.drafts import DraftCause, DraftCitation, DraftDocumentCitation
-from machine_fault_triage.inputs import Document, ServiceRecord
+from machine_fault_triage.inputs import Document, Page, ServiceRecord
 from machine_fault_triage.models import (
     Cause,
     Citation,
@@ -16,6 +16,7 @@ from machine_fault_triage.models import (
 )
 
 _SHORTEST_QUOTE = 3
+_SHORTEST_MOVED_QUOTE = 5
 _FIGURE = re.compile(r"(?<![\w.,])\d+(?:[.,]\d+)?(?![.,]?\d)(?!\w)")
 
 
@@ -27,7 +28,10 @@ def ground(
     """Build causes from model drafts, keeping only what the evidence supports.
 
     A document citation is verified when its quote is at least three words
-    long and occurs on the cited page as whole words. A history citation is
+    long and occurs on the cited page as whole words. A quote of five words
+    or more that is missing from the cited page but stands on another page
+    of the same document is verified on the nearest such page: ``page`` then
+    names that page and ``cited_page`` the one the model gave. A history citation is
     verified when the record was part of the supplied evidence. Citations that
     point at unknown documents or records are dropped, and a cause left without
     a verified citation is reduced to low confidence.
@@ -115,17 +119,29 @@ def _ground_document_citation(
 ) -> DocumentCitation | None:
     if document is None or draft.page < 1 or not draft.quote.strip():
         return None
-    page = document.page(draft.page)
+    page = _page_with_quote(document, draft)
     return DocumentCitation(
         document_id=document.id,
         document_title=document.title,
-        page=draft.page,
+        page=page.number if page is not None else draft.page,
         quote=draft.quote,
-        verified=page is not None
-        and len(draft.quote.split()) >= _SHORTEST_QUOTE
-        and contains_quote(page.text, draft.quote),
+        verified=page is not None,
         source=page.source if page is not None else PageSource.TEXT_LAYER,
+        cited_page=draft.page if page is not None and page.number != draft.page else None,
     )
+
+
+def _page_with_quote(document: Document, draft: DraftDocumentCitation) -> Page | None:
+    words = len(draft.quote.split())
+    if words < _SHORTEST_QUOTE:
+        return None
+    cited = document.page(draft.page)
+    if cited is not None and contains_quote(cited.text, draft.quote):
+        return cited
+    if words < _SHORTEST_MOVED_QUOTE:
+        return None
+    holding = [page for page in document.pages if contains_quote(page.text, draft.quote)]
+    return min(holding, key=lambda page: (abs(page.number - draft.page), page.number), default=None)
 
 
 def _figures(texts: Iterable[str]) -> list[str]:
