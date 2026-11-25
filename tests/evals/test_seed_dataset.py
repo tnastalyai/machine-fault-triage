@@ -20,7 +20,7 @@ from machine_fault_triage.evals import (
     summarize,
 )
 from machine_fault_triage.models import Confidence
-from machine_fault_triage.testing import FakeModel
+from machine_fault_triage.testing import FakeModel, FakePhotoReader
 
 SEED = Path(__file__).resolve().parents[2] / "datasets" / "seed"
 
@@ -72,7 +72,10 @@ def answer_key(case: EvalCase, dataset: Dataset) -> DraftTriage:
 
 
 def means(dataset: Dataset, model: FakeModel) -> dict[Metric, float]:
-    report = run_eval(dataset, model, model_label="scripted")
+    shown = [
+        " ".join(case.expect.photo_shows) for case in dataset.cases for _ in case.report.photos
+    ]
+    report = run_eval(dataset, model, model_label="scripted", photo_reader=FakePhotoReader(shown))
     return {summary.metric: summary.mean for summary in summarize(report)}
 
 
@@ -80,12 +83,13 @@ def test_seed_dataset_covers_both_devices_and_the_planned_categories() -> None:
     dataset = load_dataset(SEED)
 
     categories = Counter(case.category for case in dataset.cases)
-    assert len(dataset.cases) == 29
+    assert len(dataset.cases) == 32
+    assert categories["code_on_photo"] == 3
     assert categories["two_problems"] == 2
     assert categories["model_variant"] == categories["model_variant_table"] == 4
     assert {case.id.split("-")[0] for case in dataset.cases} == {"hp", "sp"}
     assert {"injection_report", "injection_document", "injection_history"} <= set(categories)
-    assert sum(case.expect.status is TriageStatus.NOT_ENOUGH_DATA for case in dataset.cases) == 6
+    assert sum(case.expect.status is TriageStatus.NOT_ENOUGH_DATA for case in dataset.cases) == 7
     assert categories["noisy_report"] == 3
 
 

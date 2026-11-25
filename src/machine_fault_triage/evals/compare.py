@@ -40,6 +40,8 @@ class Comparison(_Record):
     candidate_prompt: str | None = None
     baseline_pages: str | None = None
     candidate_pages: str | None = None
+    baseline_photo_reader: str | None = None
+    candidate_photo_reader: str | None = None
     deltas: tuple[MetricDelta, ...]
 
 
@@ -70,6 +72,8 @@ def compare_runs(baseline: RunReport, candidate: RunReport) -> Comparison:
         candidate_prompt=candidate.prompt_digest,
         baseline_pages=baseline.page_selection,
         candidate_pages=candidate.page_selection,
+        baseline_photo_reader=baseline.photo_reader,
+        candidate_photo_reader=candidate.photo_reader,
         deltas=tuple(deltas),
     )
 
@@ -108,6 +112,11 @@ def render_comparison(comparison: Comparison) -> str:
         lines.append(
             f"the runs selected pages differently: {comparison.baseline_pages or 'all'}"
             f" and {comparison.candidate_pages or 'all'}"
+        )
+    if comparison.baseline_photo_reader != comparison.candidate_photo_reader:
+        lines.append(
+            f"the runs read photos differently: {comparison.baseline_photo_reader or 'no reader'}"
+            f" and {comparison.candidate_photo_reader or 'no reader'}"
         )
     for delta in comparison.deltas:
         lines.extend(f"improved  {delta.metric.value}: {case_id}" for case_id in delta.improved)

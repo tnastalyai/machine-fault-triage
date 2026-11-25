@@ -1,0 +1,20 @@
+id = "sp-p11-code-on-photo"
+category = "code_on_photo"
+documents = ["drennik-ts2400-manual"]
+
+[report]
+description = "Halfway through the field the terminal started beeping and the application rate dropped. Tank is still half full. Photo of the terminal attached."
+language = "en"
+photos = ["photos/sprayer-terminal-p11.png"]
+
+[expect]
+status = "ok"
+cause_terms = [["suction filter", "flow meter", "flowmeter"]]
+photo_shows = ["P11"]
+report_keeps = ["P11", "half full"]
+
+[[expect.evidence]]
+type = "document"
+document_id = "drennik-ts2400-manual"
+page = 22
+anchor = "P11"

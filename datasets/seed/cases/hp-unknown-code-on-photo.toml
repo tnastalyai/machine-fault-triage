@@ -1,0 +1,13 @@
+id = "hp-unknown-code-on-photo"
+category = "code_on_photo"
+documents = ["velmora-aw90-service-manual"]
+
+[report]
+description = "This came up on the display this morning, see the photo. That is all I can tell you."
+language = "en"
+photos = ["photos/heat-pump-display-e88.png"]
+
+[expect]
+status = "not_enough_data"
+photo_shows = ["E88"]
+report_keeps = ["E88"]

@@ -13,6 +13,7 @@ from tests.pdf_files import write_pdf
 CORRECT = "tests.evals.factories:correct_model"
 ABSTAINING = "tests.evals.factories:abstaining_model"
 EMBEDDER = "tests.evals.factories:configured_embedder"
+READER = "tests.evals.factories:configured_reader"
 
 
 def run(dataset: Path, model: str, out: Path) -> int:
@@ -491,3 +492,20 @@ def test_library_sync_with_an_unloadable_engine_is_a_usage_error(
 ) -> None:
     assert sync(tmp_path, "--ocr", "tests.pdf_files:absent") == 2
     assert "cannot load the recognition engine from" in capsys.readouterr().err
+
+
+def test_photo_reader_option_reads_the_photos_of_the_cases(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    case = CASE_TOML.replace('language = "en"', 'language = "en"\nphotos = ["display.png"]')
+    root = write_dataset(tmp_path / "set", case=case)
+    (root / "display.png").write_bytes(b"picture")
+    out = tmp_path / "report.json"
+    arguments = ["eval", "run", "--dataset", str(root), "--model", CORRECT, "--out", str(out)]
+
+    assert main(arguments) == 2
+    assert "no photo_reader was given" in capsys.readouterr().err
+    assert main([*arguments, "--photo-reader", READER, "--photo-reader-option", "text=E7"]) == 0
+    report = RunReport.model_validate_json(out.read_text())
+    assert report.photo_reader == f"{READER} text=E7"
+    assert report.runs()[0].result.photo_readings == ("E7",)

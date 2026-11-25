@@ -149,6 +149,18 @@ def _parser() -> argparse.ArgumentParser:
         help="with --chunk-size: cut fixed pieces that overlap by this many characters",
     )
     run.add_argument(
+        "--photo-reader",
+        metavar="MODULE:CALLABLE",
+        help="import path of a callable that returns the reader of the photos in the cases",
+    )
+    run.add_argument(
+        "--photo-reader-option",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="keyword argument for the photo reader callable; repeat for several",
+    )
+    run.add_argument(
         "--embedder",
         help="with --pages: also match pages by meaning, using the embedder returned by"
         " this module:callable",
@@ -188,6 +200,11 @@ def _run(arguments: argparse.Namespace) -> str:
         raise InvalidRequestError(message) from error
     pages = _selector(arguments)
     model: StructuredModel = _load("model", arguments.model, arguments.option)
+    reader = (
+        _load("photo reader", arguments.photo_reader, arguments.photo_reader_option)
+        if arguments.photo_reader
+        else None
+    )
     report = run_eval(
         load_dataset(arguments.dataset),
         model,
@@ -200,6 +217,8 @@ def _run(arguments: argparse.Namespace) -> str:
         pages=pages,
         page_selection=None if pages is None else pages.description,
         prompt_version=arguments.prompt,
+        photo_reader=reader,
+        photo_reader_label=" ".join((arguments.photo_reader or "", *arguments.photo_reader_option)),
     )
     arguments.out.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
     return render_summary(report)

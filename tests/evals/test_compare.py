@@ -76,3 +76,12 @@ def test_runs_over_different_datasets_are_not_compared() -> None:
 
     with pytest.raises(IncomparableRunsError):
         compare_runs(baseline, candidate)
+
+
+def test_comparison_says_when_the_runs_read_photos_differently() -> None:
+    baseline = run_eval(dataset([answerable_case()]), FakeModel([correct_draft()]), model_label="x")
+    candidate = baseline.model_copy(update={"photo_reader": "reader-2"})
+
+    assert "the runs read photos differently: no reader and reader-2" in render_comparison(
+        compare_runs(baseline, candidate)
+    )

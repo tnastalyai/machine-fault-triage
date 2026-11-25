@@ -1,0 +1,20 @@
+id = "hp-a12-code-on-photo"
+category = "code_on_photo"
+documents = ["velmora-aw90-service-manual"]
+
+[report]
+description = "Heat pump installed in September. Since yesterday the radiators are cold and the display keeps switching to what is on the photo."
+language = "en"
+photos = ["photos/heat-pump-display-a12.png"]
+
+[expect]
+status = "ok"
+cause_terms = [["flow"], ["strainer", "vent", "air in", "pump"]]
+photo_shows = ["A12"]
+report_keeps = ["A12", "radiators"]
+
+[[expect.evidence]]
+type = "document"
+document_id = "velmora-aw90-service-manual"
+page = 14
+anchor = "A12"

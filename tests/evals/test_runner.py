@@ -16,10 +16,10 @@ from machine_fault_triage import (
     TriageStatus,
     Usage,
 )
-from machine_fault_triage.evals import Metric, Pricing, RunReport, run_eval, summarize
+from machine_fault_triage.evals import EvalCase, Metric, Pricing, RunReport, run_eval, summarize
 from machine_fault_triage.evals.report import render_summary
 from machine_fault_triage.prompts import instructions, prompt_digest
-from machine_fault_triage.testing import FakeEmbedder, FakeModel
+from machine_fault_triage.testing import FakeEmbedder, FakeModel, FakePhotoReader
 from tests.evals.factories import (
     abstaining_draft,
     answerable_case,
@@ -283,15 +283,79 @@ def test_device_model_of_a_case_is_sent_and_counted_in_the_check_up_front() -> N
         run_eval(dataset([case]), FakeModel([]), model_label="x", evidence_limit=sent - 1)
 
 
-def test_case_with_photos_stops_the_run_before_any_model_call() -> None:
+def with_photo(case: EvalCase, **expectation: object) -> EvalCase:
     photo = Photo(media_type="image/png", data=b"pixels")
-    case = answerable_case()
-    with_photo = case.model_copy(
-        update={"report": case.report.model_copy(update={"photos": (photo,)})}
+    return case.model_copy(
+        update={
+            "report": case.report.model_copy(update={"photos": (photo,)}),
+            "expect": case.expect.model_copy(update=expectation),
+        }
     )
+
+
+def test_case_with_photos_and_no_reader_stops_the_run_before_any_model_call() -> None:
     model = FakeModel([correct_draft()])
 
-    with pytest.raises(InvalidRequestError, match="does not read photos yet"):
-        run_eval(dataset([with_photo]), model, model_label="x")
+    with pytest.raises(InvalidRequestError, match="no photo_reader was given"):
+        run_eval(dataset([with_photo(answerable_case())]), model, model_label="x")
 
     assert model.requests == []
+
+
+def test_photos_of_a_case_are_read_scored_and_their_tokens_reported() -> None:
+    case = with_photo(answerable_case(), photo_shows=("E7",))
+    reader = FakePhotoReader(
+        ["Display text: E7", "Display text: 37"], usage=Usage(input_tokens=400, output_tokens=30)
+    )
+
+    report = run_eval(
+        dataset([case]),
+        FakeModel([correct_draft(), correct_draft()]),
+        model_label="x",
+        repeats=2,
+        photo_reader=reader,
+        photo_reader_label="scripted reader",
+    )
+
+    first, second = report.runs()
+    assert (first.scores[Metric.PHOTO_READ], second.scores[Metric.PHOTO_READ]) == (1, 0)
+    assert report.photo_reader == "scripted reader"
+    assert report.photo_usage() == Usage(input_tokens=800, output_tokens=60)
+    assert (
+        "800 input and 60 output tokens for reading photos with scripted reader, not in the cost"
+        in render_summary(report)
+    )
+
+
+def test_run_without_a_reader_names_none_in_the_report() -> None:
+    report = run_eval(
+        dataset([answerable_case()]),
+        FakeModel([correct_draft()]),
+        model_label="x",
+        photo_reader_label="ignored",
+    )
+
+    assert (report.photo_reader, report.photo_usage()) == (None, None)
+
+
+def test_code_seen_only_on_a_photo_decides_which_pages_are_sent_and_ranked() -> None:
+    shown = with_photo(answerable_case())
+    case = shown.model_copy(
+        update={
+            "report": shown.report.model_copy(
+                update={"description": "See the photo of the display."}
+            )
+        }
+    )
+
+    report = run_eval(
+        dataset([case]),
+        FakeModel([correct_draft()]),
+        model_label="x",
+        pages=KeywordPageSelector(1),
+        photo_reader=FakePhotoReader(["E7: flow sensor open or short circuit"]),
+    )
+
+    (run,) = report.runs()
+    assert run.scores[Metric.EXPECTED_PAGE_SENT] == 1
+    assert run.scores[Metric.RECIPROCAL_RANK] == 1

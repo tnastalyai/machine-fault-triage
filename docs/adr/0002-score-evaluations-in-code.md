@@ -25,6 +25,7 @@ The first set of metrics is computed in code only. Each is a per-case score betw
 - `citations_verified` divides the verified citations in the result by the citations the model claimed. The runner records the raw model answer for this, because citations of unknown documents are dropped from the result and would otherwise go uncounted.
 - `cited_page_right` is the share of verified document citations whose quote stands on the page the model named, not on another page of the document where grounding found it.
 - `report_restated` checks the restated report of a case that lists what it must keep, such as the code, and what it must leave out, such as a phone number, and fails it when it holds a code or number the customer did not report.
+- `photo_read` checks that what was read from the photos of a case holds what the case says they show, such as the code on a display. It scores the photo reader apart from the answer.
 - `injection_resisted` checks that strings only a successful attack would produce are absent from the result, and that the result still has the expected status. The second half catches an attack that talks the model into abstaining.
 - `safety_warning` checks that a risky repair comes with a warning.
 
@@ -40,5 +41,5 @@ A run repeats each case, because current models offer no deterministic mode. The
 - `top_cause` is a proxy. A correct cause in unexpected words scores 0, and a wrong cause that mentions the right component scores 1. Term groups are kept short and are paired with `expected_evidence` to limit both errors. A judging model, validated against human labels, will be added for this one question when the dataset is large enough to validate it.
 - No metric checks that the cited text supports the cause. That, too, needs a judge.
 - Cases written with the help of a language model share its blind spots. The dataset needs cases written by hand, and a control run on a model from another provider, before its numbers are published.
-- With twenty-nine cases the standard errors are wide. The seed dataset can show that a change broke something. It cannot rank two models that are close.
+- With thirty-two cases the standard errors are wide. The seed dataset can show that a change broke something. It cannot rank two models that are close.
 - Every run is timed, and its token usage is kept when the model reports it. Prices are passed in by the caller and stored in the report, because the library does not track provider price lists.

@@ -20,6 +20,7 @@ from machine_fault_triage.inputs import (
 )
 from machine_fault_triage.pipeline import (
     check_evidence_size,
+    check_photos,
     check_report_size,
     evidence_request,
     run_triage,
@@ -29,12 +30,15 @@ from machine_fault_triage.ports import (
     GenerationRequest,
     PageRanker,
     PageSelector,
+    PhotoReader,
     Selection,
     StructuredModel,
 )
 from machine_fault_triage.prompts import CURRENT_PROMPT_VERSION, instructions, prompt_digest
 
 _TENANT_ID = "evaluation"
+_PHOTO_LIMIT = 5
+_PHOTO_SIZE_LIMIT = 5_000_000
 
 
 def run_eval(  # noqa: PLR0913
@@ -50,6 +54,8 @@ def run_eval(  # noqa: PLR0913
     evidence_limit: int = 1_000_000,
     report_limit: int = 20_000,
     retries: int = 1,
+    photo_reader: PhotoReader | None = None,
+    photo_reader_label: str | None = None,
 ) -> RunReport:
     """Run each case ``repeats`` times against the model and score every result.
 
@@ -71,19 +77,27 @@ def run_eval(  # noqa: PLR0913
 
     ``retries`` is how often an invalid or truncated answer is asked for again.
 
+    ``photo_reader`` reads the photos of the cases that have any, once per
+    repeat and before pages are selected, as in ``run_triage``;
+    ``photo_reader_label`` names it in the report. The tokens of reading are
+    totalled apart and left out of the cost. The up-front check against
+    ``evidence_limit`` cannot count what the photos will say.
+
     Raises:
         InvalidRequestError: If ``repeats`` is less than one, if ``retries``
-            is negative, if no prompt has the given version, or if a case
-            exceeds ``report_limit`` or ``evidence_limit`` or has photos.
+            is negative, if no prompt has the given version, if a case
+            exceeds ``report_limit`` or ``evidence_limit``, or if a case has
+            photos and no reader was given, or more or larger photos than
+            ``run_triage`` takes by default.
     """
     if repeats < 1 or retries < 0:
         message = "repeats must be at least 1 and retries must not be negative"
         raise InvalidRequestError(message)
     for case in dataset.cases:
         check_report_size(case.report, report_limit)
-        if case.report.photos:
-            message = f"case {case.id} has photos; an evaluation run does not read photos yet"
-            raise InvalidRequestError(message)
+        check_photos(
+            case.report, _PHOTO_LIMIT, _PHOTO_SIZE_LIMIT, has_reader=photo_reader is not None
+        )
     if pages is None:
         for case in dataset.cases:
             documents = without_superseded(dataset.documents_for(case))
@@ -105,6 +119,7 @@ def run_eval(  # noqa: PLR0913
         prompt_version=prompt_version,
         prompt_digest=prompt_digest(prompt_version),
         page_selection=page_selection,
+        photo_reader=photo_reader_label if photo_reader is not None else None,
         repeats=repeats,
         pricing=pricing,
         cases=tuple(
@@ -116,7 +131,14 @@ def run_eval(  # noqa: PLR0913
                         case,
                         dataset,
                         model,
-                        _Settings(pages, prompt_version, evidence_limit, report_limit, retries),
+                        _Settings(
+                            pages,
+                            prompt_version,
+                            evidence_limit,
+                            report_limit,
+                            retries,
+                            photo_reader,
+                        ),
                     )
                     for _ in range(repeats)
                 ),
@@ -132,17 +154,16 @@ class _Settings(NamedTuple):
     evidence_limit: int
     report_limit: int
     retries: int
+    photo_reader: PhotoReader | None
 
 
 def _run_case(
     case: EvalCase, dataset: Dataset, model: StructuredModel, settings: _Settings
 ) -> RepeatOutcome:
-    pages = settings.pages
     recorder = _Recorder(model)
     started = time.perf_counter()
     documents = without_superseded(dataset.documents_for(case))
-    selection = Selection(documents) if pages is None else pages.select(case.report, documents)
-    ranked = pages.rank(case.report, documents) if isinstance(pages, PageRanker) else None
+    watched = None if settings.pages is None else _Watched(settings.pages)
     evidence = _CaseEvidence(documents, case.records)
     result = run_triage(
         case.report,
@@ -151,28 +172,36 @@ def _run_case(
         model=recorder,
         documents=evidence,
         history=evidence,
-        pages=_Selected(selection),
+        pages=watched,
         prompt_version=settings.prompt_version,
         evidence_limit=settings.evidence_limit,
         report_limit=settings.report_limit,
         retries=settings.retries,
         device_model=case.device_model,
+        photo_reader=settings.photo_reader,
     )
+    sent = documents if watched is None else watched.sent
+    ranked = None if watched is None else watched.ranked
     return RepeatOutcome(
         result=result,
-        scores=score(case, recorder.draft, result, selection.documents, ranked),
+        scores=score(case, recorder.draft, result, sent, ranked),
         seconds=time.perf_counter() - started,
         usage=result.usage,
     )
 
 
-class _Selected:
-    def __init__(self, selection: Selection) -> None:
-        self._selection = selection
+class _Watched:
+    def __init__(self, pages: PageSelector) -> None:
+        self._pages = pages
+        self.sent: Sequence[Document] = ()
+        self.ranked: Sequence[tuple[str, int]] | None = None
 
     def select(self, report: FaultReport, documents: Sequence[Document]) -> Selection:
-        del report, documents
-        return self._selection
+        selection = self._pages.select(report, documents)
+        self.sent = selection.documents
+        if isinstance(self._pages, PageRanker):
+            self.ranked = self._pages.rank(report, documents)
+        return selection
 
 
 class _CaseEvidence:

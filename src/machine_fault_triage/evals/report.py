@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from machine_fault_triage.evals.scoring import Metric
-from machine_fault_triage.models import TriageResult, Usage
+from machine_fault_triage.models import TriageResult, Usage, total_usage
 
 
 class _Record(BaseModel):
@@ -88,6 +88,7 @@ class RunReport(_Record):
     prompt_version: int | None = None
     prompt_digest: str | None = None
     page_selection: str | None = None
+    photo_reader: str | None = None
     repeats: int = Field(ge=1)
     pricing: Pricing | None = None
     cases: tuple[CaseOutcome, ...]
@@ -106,6 +107,10 @@ class RunReport(_Record):
             output_tokens=sum(usage.output_tokens for usage in reported),
             cached_input_tokens=sum(usage.cached_input_tokens for usage in reported),
         )
+
+    def photo_usage(self) -> Usage | None:
+        """Total the tokens spent on reading the photos of the reports, if any were reported."""
+        return total_usage(run.result.photo_usage for run in self.runs())
 
     def embedding_tokens(self) -> int:
         """Total the tokens that page selection spent on embeddings."""
@@ -195,6 +200,13 @@ def _resources(report: RunReport) -> str:
         priced = report.pricing is not None and report.pricing.embedding is not None
         left_out = "" if priced or report.cost() is None else ", not in the cost"
         parts.append(f"{report.embedding_tokens()} embedding tokens{left_out}")
+    photos = report.photo_usage()
+    if photos is not None:
+        parts.append(
+            f"{photos.input_tokens} input and {photos.output_tokens} output tokens"
+            f" for reading photos with {report.photo_reader or 'an unnamed reader'},"
+            " not in the cost"
+        )
     cost = report.cost()
     if cost is not None:
         parts.append(f"${cost:.2f} in total, ${cost / len(runs):.4f} per run")

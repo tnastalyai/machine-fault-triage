@@ -102,3 +102,44 @@ def test_blank_device_model_is_rejected_when_the_dataset_loads(tmp_path: Path) -
 
     with pytest.raises(DatasetError, match="a device model must not be blank"):
         load_dataset(write_dataset(tmp_path / "blank", case=blank))
+
+
+PHOTO_CASE = CASE_TOML.replace(
+    'language = "en"', 'language = "en"\nphotos = ["photos/display.png"]'
+)
+
+
+def test_photos_named_by_a_case_are_read_and_count_towards_the_digest(tmp_path: Path) -> None:
+    root = write_dataset(tmp_path, case=PHOTO_CASE)
+    (root / "photos").mkdir()
+    (root / "photos" / "display.png").write_bytes(b"first picture")
+
+    first = load_dataset(root)
+    (root / "photos" / "display.png").write_bytes(b"second picture")
+
+    (photo,) = first.cases[0].report.photos
+    assert (photo.media_type, photo.data) == ("image/png", b"first picture")
+    assert load_dataset(root).digest != first.digest
+
+
+@pytest.mark.parametrize(
+    "name", ["photos/absent.png", "photos/display.gif", "../outside.png", "photos/empty.png"]
+)
+def test_photo_that_cannot_be_used_is_rejected_when_the_dataset_loads(
+    tmp_path: Path, name: str
+) -> None:
+    root = write_dataset(tmp_path / "set", case=PHOTO_CASE.replace("photos/display.png", name))
+    (root / "photos").mkdir()
+    (root / "photos" / "display.gif").write_bytes(b"picture")
+    (root / "photos" / "empty.png").write_bytes(b"")
+    (tmp_path / "outside.png").write_bytes(b"picture")
+
+    with pytest.raises(DatasetError):
+        load_dataset(root)
+
+
+def test_case_that_says_what_its_photos_show_must_have_photos(tmp_path: Path) -> None:
+    case = CASE_TOML.replace("[expect]", '[expect]\nphoto_shows = ["E7"]')
+
+    with pytest.raises(DatasetError, match="must have photos"):
+        load_dataset(write_dataset(tmp_path, case=case))

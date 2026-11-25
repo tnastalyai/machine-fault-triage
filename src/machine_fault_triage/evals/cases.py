@@ -2,8 +2,9 @@
 
 import hashlib
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -11,6 +12,13 @@ from machine_fault_triage.errors import DatasetError
 from machine_fault_triage.grounding import contains_quote
 from machine_fault_triage.inputs import Document, FaultReport, ServiceRecord
 from machine_fault_triage.models import TriageStatus
+
+_PHOTO_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
 
 
 class _Spec(BaseModel):
@@ -68,6 +76,10 @@ class Expectation(_Spec):
     ``report_keeps`` lists what the restated report must still say, such as
     the code, and ``report_omits`` what it must have left out, such as a
     phone number or a greeting.
+
+    ``photo_shows`` lists what the reading of the report's photos must hold,
+    such as the code on the display. It scores the photo reader on its own,
+    whatever the answer then makes of the reading.
     """
 
     status: TriageStatus
@@ -78,6 +90,7 @@ class Expectation(_Spec):
     other_models: tuple[str, ...] = ()
     report_keeps: tuple[str, ...] = ()
     report_omits: tuple[str, ...] = ()
+    photo_shows: tuple[str, ...] = ()
     safety_warning: bool = False
     forbidden: tuple[str, ...] = ()
 
@@ -127,6 +140,9 @@ class EvalCase(_Spec):
         if self.expect.other_models and self.device_model is None:
             message = "a case that lists values of other models must name the device model"
             raise ValueError(message)
+        if self.expect.photo_shows and not self.report.photos:
+            message = "a case that says what its photos show must have photos"
+            raise ValueError(message)
         return self
 
 
@@ -166,18 +182,25 @@ class Dataset(_Spec):
 def load_dataset(root: Path) -> Dataset:
     """Load a dataset from ``root/documents/*.toml`` and ``root/cases/*.toml``.
 
+    A case names the photos of its report as paths inside the dataset
+    directory, under ``photos`` in its ``[report]`` table. They are read
+    here, as JPEG, PNG or WebP by their file ending, and count towards the
+    digest of the dataset.
+
     Raises:
-        DatasetError: If a file cannot be read or parsed, or the cases contradict
-            the documents and records they refer to.
+        DatasetError: If a file cannot be read or parsed, if a photo lies
+            outside the dataset directory or has another file ending, or if
+            the cases contradict the documents and records they refer to.
     """
     document_paths = sorted((root / "documents").glob("*.toml"))
     case_paths = sorted((root / "cases").glob("*.toml"))
     documents = [_load(path, Document) for path in document_paths]
-    cases = [_load(path, EvalCase) for path in case_paths]
+    photo_paths: list[Path] = []
+    cases = [_load(path, EvalCase, _with_photos(root, photo_paths)) for path in case_paths]
     try:
         return Dataset(
             name=root.resolve().name,
-            digest=_digest(root, [*document_paths, *case_paths]),
+            digest=_digest(root, [*document_paths, *case_paths, *sorted(set(photo_paths))]),
             documents=tuple(documents),
             cases=tuple(cases),
         )
@@ -186,18 +209,42 @@ def load_dataset(root: Path) -> Dataset:
         raise DatasetError(message) from error
 
 
-def _load[SpecT: BaseModel](path: Path, spec: type[SpecT]) -> SpecT:
+type _Table = dict[str, Any]
+
+
+def _load[SpecT: BaseModel](
+    path: Path, spec: type[SpecT], prepare: Callable[[_Table], _Table] = lambda table: table
+) -> SpecT:
     try:
-        return spec.model_validate(tomllib.loads(path.read_text(encoding="utf-8")))
-    except (OSError, tomllib.TOMLDecodeError, ValidationError) as error:
+        return spec.model_validate(prepare(tomllib.loads(path.read_text(encoding="utf-8"))))
+    except (OSError, tomllib.TOMLDecodeError, ValidationError, ValueError) as error:
         message = f"{path}: {error}"
         raise DatasetError(message) from error
+
+
+def _with_photos(root: Path, seen: list[Path]) -> Callable[[_Table], _Table]:
+    def prepare(table: _Table) -> _Table:
+        report = table.get("report")
+        if not isinstance(report, dict) or "photos" not in report:
+            return table
+        photos = []
+        for name in report["photos"]:
+            path = (root / str(name)).resolve()
+            media_type = _PHOTO_TYPES.get(path.suffix.lower())
+            if not path.is_relative_to(root.resolve()) or media_type is None:
+                message = f"photo {name!r} must be a JPEG, PNG or WebP file inside the dataset"
+                raise ValueError(message)
+            photos.append({"media_type": media_type, "data": path.read_bytes()})
+            seen.append(path)
+        return {**table, "report": {**report, "photos": photos}}
+
+    return prepare
 
 
 def _digest(root: Path, paths: list[Path]) -> str:
     digest = hashlib.sha256()
     for path in paths:
-        digest.update(path.relative_to(root).as_posix().encode())
+        digest.update(path.resolve().relative_to(root.resolve()).as_posix().encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()
 

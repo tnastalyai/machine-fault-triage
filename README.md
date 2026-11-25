@@ -148,13 +148,13 @@ uv run machine-fault-triage eval run --dataset datasets/seed \
 uv run machine-fault-triage eval compare runs/baseline.json runs/sonnet.json
 ```
 
-`--model` takes any `module:callable` that returns a `StructuredModel`; the `anthropic` and `openai` extras ship adapters that read credentials from the environment and call paid APIs. `--pages N` sends only the best-matching pages, by wording or, with `--embedder`, also by meaning; `--prompt N` runs an older prompt; `--price`, `--cached-price` and `--embedding-price` add cost to the report. [`datasets/seed`](datasets/seed) holds two fictional devices and twenty-nine cases, three of them prompt-injection attempts: a first signal, too small to rank models that are close.
+`--model` takes any `module:callable` that returns a `StructuredModel`; the `anthropic` and `openai` extras ship adapters that read credentials from the environment and call paid APIs. `--pages N` sends only the best-matching pages, by wording or, with `--embedder`, also by meaning; `--prompt N` runs an older prompt; `--price`, `--cached-price` and `--embedding-price` add cost to the report. [`datasets/seed`](datasets/seed) holds two fictional devices and thirty-two cases, three of them prompt-injection attempts: a first signal, too small to rank models that are close.
 
 ## Limitations
 
 - Verification proves that a quote exists on the page, not that it supports the cause.
 - `evidence_limit` and `report_limit` count characters, not tokens. The default of the first suits models with a large context window; set both for the models in use.
-- A report needs some text even when its photos say everything. A photo is read by a model, and nothing checks the reading: a misread code leads to verified quotes for the wrong code. `TriageResult.photo_readings` returns what was read so that a person can compare it with the photo. Photos are sent to the provider as given, metadata included; strip it first if that matters. The reader has been tried on one synthetic image, not on real photos of displays, and evaluation runs do not read photos.
+- A report needs some text even when its photos say everything. A photo is read by a model, and nothing checks the reading: a misread code leads to verified quotes for the wrong code. `TriageResult.photo_readings` returns what was read so that a person can compare it with the photo. Photos are sent to the provider as given, metadata included; strip it first if that matters. The reader has been tried on synthetic images only, not on real photos of displays.
 - `device_model` is passed to the model as evidence. Whether the answer kept to that model's row of a table is measured in evaluation (`right_model`), not verified in code, and page selection does not use the model name.
 - Checks, fixes and parts are free text. Only their numbers are compared with the evidence.
 - Quotes must be literal; a two-word table cell does not verify, nor does a sentence the model repaired after recognition had mixed its lines with another column's.
