@@ -1,0 +1,14 @@
+id = "velmora-aw-series-data-sheet"
+title = "Velmora AW series: hydraulic data sheet"
+
+[[pages]]
+number = 2
+text = """
+2 Flow monitoring by model
+
+This sheet covers the AW-60, AW-90 and AW-120. The flow switch and the circulation pump differ between the models, so the limits below are not interchangeable.
+
+AW-60: fault A12 is raised when the flow rate stays below 11 l/min for 60 seconds. Clean the strainer and set the circulation pump to stage 2.
+AW-90: fault A12 is raised when the flow rate stays below 16 l/min for 60 seconds. Clean the strainer and set the circulation pump to stage 3.
+AW-120: fault A12 is raised when the flow rate stays below 23 l/min for 60 seconds. Clean the strainer and check that both circulation pumps run.
+"""

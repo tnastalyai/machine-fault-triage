@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- `run_triage(..., device_model=...)`: the model and variant of the device reach the model as evidence, so that an answer can keep to the values a page gives for that model. Evaluation cases take `device_model` and `expect.other_models`, scored by the new `right_model` metric, and the seed dataset gains two data sheets and four paired cases that differ only in the model.
 - An answer that breaks the schema or is cut off is asked for again, once by default (`run_triage(..., retries=N)`, `eval run --retries N`). The reason goes to the model as untrusted data next to one fixed sentence of instructions. `TriageResult.attempts` counts the model calls, `usage` totals them, and an evaluation summary says how many runs asked again. A refusal is final.
 - Bounds on what goes in and comes out of the model. A fault report must not be blank, a document cannot hold two pages with the same number, and `run_triage` refuses evidence in which two documents or two service records share an id. `report_limit` refuses a fault report longer than 20,000 characters unless the caller raises it (`eval run --report-limit N`). `evidence_limit` refuses a request too large for the model before it is paid for; an evaluation run checks every case up front. The answer schema caps every text and list, so a runaway answer is rejected.
 - `Generation.detail` and `TriageResult.failure`: a run that failed because the answer broke the schema names the fields that broke it, without the values, field names or types the model made up.
@@ -14,7 +15,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Evaluation harness: a TOML case format, metrics computed in code, repeated runs with a per-metric summary, and a paired comparison of two runs.
 - `machine-fault-triage eval run` and `eval compare` commands.
 - `Usage` on `Generation`: adapters report the tokens of each call, and an evaluation report totals them, times every run and prices them with `--price`.
-- A seed dataset with two fictional devices and eighteen cases, including prompt-injection attempts and reports that describe two problems at once.
+- A seed dataset with two fictional devices and twenty-two cases, including prompt-injection attempts and reports that describe two problems at once.
 - `every_problem_answered` and `uncovered_left_open` metrics: a case can list several problems, each needing a cause of its own, and name a reported problem that the evidence does not cover and that must be left open instead of guessed.
 - Fault codes are matched however they are typed: `A11`, `a11` and `A-11` find a page that prints `A.11`.
 - `machine_fault_triage.adapters.claude.ClaudeModel`, installed with the `anthropic` extra.

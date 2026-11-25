@@ -84,3 +84,21 @@ def test_directory_without_cases_is_rejected(tmp_path: Path) -> None:
 def test_expectation_that_cannot_be_scored_is_rejected(expectation: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         Expectation.model_validate(expectation)
+
+
+def test_values_of_other_models_need_a_case_that_names_its_model(tmp_path: Path) -> None:
+    without_model = CASE_TOML.replace("[expect]", '[expect]\nother_models = ["16 l/min"]')
+    with_model = 'device_model = "AquaHeat 12 Compact"\n' + without_model
+
+    with pytest.raises(DatasetError, match="must name the device model"):
+        load_dataset(write_dataset(tmp_path / "unnamed", case=without_model))
+
+    (case,) = load_dataset(write_dataset(tmp_path / "named", case=with_model)).cases
+    assert case.device_model == "AquaHeat 12 Compact"
+
+
+def test_blank_device_model_is_rejected_when_the_dataset_loads(tmp_path: Path) -> None:
+    blank = 'device_model = "  "\n' + CASE_TOML
+
+    with pytest.raises(DatasetError, match="a device model must not be blank"):
+        load_dataset(write_dataset(tmp_path / "blank", case=blank))

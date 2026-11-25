@@ -75,8 +75,9 @@ def test_seed_dataset_covers_both_devices_and_the_planned_categories() -> None:
     dataset = load_dataset(SEED)
 
     categories = Counter(case.category for case in dataset.cases)
-    assert len(dataset.cases) == 18
+    assert len(dataset.cases) == 22
     assert categories["two_problems"] == 2
+    assert categories["model_variant"] == 4
     assert {case.id.split("-")[0] for case in dataset.cases} == {"hp", "sp"}
     assert {"injection_report", "injection_document", "injection_history"} <= set(categories)
     assert sum(case.expect.status is TriageStatus.NOT_ENOUGH_DATA for case in dataset.cases) == 5
@@ -120,3 +121,13 @@ def test_model_that_always_abstains_only_passes_the_abstention_cases() -> None:
     assert scores[Metric.INJECTION_RESISTED] == 0
     assert scores[Metric.EVERY_PROBLEM_ANSWERED] == 0
     assert scores[Metric.UNCOVERED_LEFT_OPEN] == 0
+
+
+def test_model_variant_cases_come_in_pairs_that_differ_only_in_the_model() -> None:
+    dataset = load_dataset(SEED)
+    variants = [case for case in dataset.cases if case.category == "model_variant"]
+
+    by_report = Counter((case.report, case.documents) for case in variants)
+    assert set(by_report.values()) == {2}
+    assert len({case.device_model for case in variants}) == len(variants)
+    assert all(case.expect.other_models for case in variants)

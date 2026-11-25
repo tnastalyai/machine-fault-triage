@@ -34,6 +34,7 @@ _STATUS_WITHOUT_OUTPUT = {
     GenerationStatus.TRUNCATED: (TriageStatus.FAILED, "The model answer was cut off."),
     GenerationStatus.INVALID: (TriageStatus.FAILED, "The model answer did not match the schema."),
 }
+_LONGEST_DEVICE_MODEL = 200
 _RETRY_NOTES = {
     GenerationStatus.INVALID: RETRY_AFTER_INVALID,
     GenerationStatus.TRUNCATED: RETRY_AFTER_TRUNCATED,
@@ -53,6 +54,7 @@ def run_triage(  # noqa: PLR0913
     evidence_limit: int = 1_000_000,
     report_limit: int = 20_000,
     retries: int = 1,
+    device_model: str | None = None,
 ) -> TriageResult:
     """Produce a grounded hint for the technician from one fault report.
 
@@ -61,6 +63,12 @@ def run_triage(  # noqa: PLR0913
     it, only the selected pages are sent, and a quote counts as verified only
     if it is found on one of them. ``prompt_version`` selects an older version
     of the instructions, to repeat a past evaluation.
+
+    ``device_model`` names the model and variant of the device, as the
+    caller's records hold it. It reaches the model as evidence, so that it
+    can keep to the values a page gives for that model. The instructions do
+    not mention it, page selection does not use it, and no check in code
+    proves that the quoted row belongs to that model.
 
     The result carries the tokens the run spent, so that the caller can log
     them per tenant and device: those of the model call in ``usage`` and
@@ -81,6 +89,7 @@ def run_triage(  # noqa: PLR0913
 
     Raises:
         InvalidRequestError: If ``tenant_id`` or ``device_id`` is blank, if
+            ``device_model`` is blank or longer than 200 characters, if
             no prompt has the given version, if ``retries`` is negative, if
             two documents or two service records share an id, if the report
             exceeds ``report_limit``, or if the evidence exceeds
@@ -93,6 +102,7 @@ def run_triage(  # noqa: PLR0913
     if not tenant_id.strip() or not device_id.strip():
         message = "tenant_id and device_id must not be blank"
         raise InvalidRequestError(message)
+    check_device_model(device_model)
     prompt = instructions(prompt_version)
     device_documents = without_superseded(
         documents.documents_for(tenant_id=tenant_id, device_id=device_id)
@@ -104,7 +114,7 @@ def run_triage(  # noqa: PLR0913
         device_documents, embedding_tokens = selection.documents, selection.embedding_tokens
     records = history.records_for(tenant_id=tenant_id, device_id=device_id)
     _check_unique("service record", [record.id for record in records])
-    request = evidence_request(prompt, report, device_documents, records)
+    request = evidence_request(prompt, report, device_documents, records, device_model)
     check_evidence_size(request, evidence_limit)
     generation, usages = _generate(model, request, retries)
     spent = {
@@ -180,6 +190,21 @@ def check_report_size(report: FaultReport, limit: int) -> None:
         raise InvalidRequestError(message)
 
 
+def check_device_model(device_model: str | None) -> None:
+    """Refuse a device model that is blank or too long to be a model name.
+
+    Raises:
+        InvalidRequestError: If the name is blank or longer than 200 characters.
+    """
+    if device_model is None:
+        return
+    if not device_model.strip() or len(device_model) > _LONGEST_DEVICE_MODEL:
+        message = (
+            f"device_model must not be blank or longer than {_LONGEST_DEVICE_MODEL} characters"
+        )
+        raise InvalidRequestError(message)
+
+
 def check_evidence_size(request: GenerationRequest, limit: int) -> None:
     """Refuse a request whose evidence is longer than ``limit`` characters.
 
@@ -200,8 +225,14 @@ def evidence_request(
     report: FaultReport,
     documents: Sequence[Document],
     records: Sequence[ServiceRecord],
+    device_model: str | None = None,
 ) -> GenerationRequest:
     """Build the one model call of a triage run: instructions and untrusted evidence."""
+    device = (
+        ()
+        if device_model is None
+        else (UntrustedBlock(label="device model", content=device_model),)
+    )
     pages = tuple(
         UntrustedBlock(
             label=f"document id={document.id} title={document.title!r} page={page.number}",
@@ -222,6 +253,7 @@ def evidence_request(
         instructions=prompt,
         untrusted=(
             UntrustedBlock(label="fault report", content=report.description),
+            *device,
             *pages,
             *history,
         ),

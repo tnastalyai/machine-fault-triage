@@ -577,3 +577,115 @@ def test_page_number_and_record_date_the_model_was_shown_are_not_made_up() -> No
     )
 
     assert result.unsupported_figures == ()
+
+
+def test_device_model_reaches_the_model_as_evidence_and_never_as_instructions() -> None:
+    evidence = StaticEvidence([manual()])
+    model = FakeModel([draft_triage([draft_cause([manual_citation()])])])
+
+    run_triage(
+        fault_report(),
+        tenant_id="tenant-1",
+        device_id="device-1",
+        model=model,
+        documents=evidence,
+        history=evidence,
+        device_model="AquaHeat 12 Compact",
+    )
+
+    (request,) = model.requests
+    assert request.untrusted[1] == UntrustedBlock(
+        label="device model", content="AquaHeat 12 Compact"
+    )
+    assert request.instructions == instructions()
+
+
+def test_run_without_a_device_model_sends_no_block_for_it() -> None:
+    model = FakeModel([draft_triage([draft_cause([manual_citation()])])])
+
+    triage(model)
+
+    (request,) = model.requests
+    assert [block.label for block in request.untrusted if "device" in block.label] == []
+
+
+@pytest.mark.parametrize("device_model", ["", "  ", "x" * 201])
+def test_blank_or_overlong_device_model_is_refused_before_the_model_is_called(
+    device_model: str,
+) -> None:
+    evidence = StaticEvidence([manual()])
+    model = FakeModel([])
+
+    with pytest.raises(InvalidRequestError, match="device_model must not be blank or longer"):
+        run_triage(
+            fault_report(),
+            tenant_id="tenant-1",
+            device_id="device-1",
+            model=model,
+            documents=evidence,
+            history=evidence,
+            device_model=device_model,
+        )
+
+    assert model.requests == []
+
+
+def test_device_model_is_sent_again_when_the_answer_is_asked_for_again() -> None:
+    evidence = StaticEvidence([manual()])
+    model = FakeModel(
+        [GenerationStatus.TRUNCATED, draft_triage([draft_cause([manual_citation()])])]
+    )
+
+    run_triage(
+        fault_report(),
+        tenant_id="tenant-1",
+        device_id="device-1",
+        model=model,
+        documents=evidence,
+        history=evidence,
+        device_model="AquaHeat 12 Compact",
+    )
+
+    first, second = model.requests
+    assert second.untrusted[: len(first.untrusted)] == first.untrusted
+
+
+def test_number_in_the_device_model_is_not_an_unsupported_figure() -> None:
+    evidence = StaticEvidence([manual()])
+    draft = draft_triage([draft_cause([manual_citation()])]).model_copy(
+        update={"summary": "The AquaHeat 4500 shows E7."}
+    )
+
+    def figures(device_model: str | None) -> tuple[str, ...]:
+        return run_triage(
+            fault_report(),
+            tenant_id="tenant-1",
+            device_id="device-1",
+            model=FakeModel([draft]),
+            documents=evidence,
+            history=evidence,
+            device_model=device_model,
+        ).unsupported_figures
+
+    assert figures(None) == ("4500",)
+    assert figures("AquaHeat 4500") == ()
+
+
+def test_device_model_counts_towards_the_evidence_limit() -> None:
+    evidence = StaticEvidence([manual()])
+    measured = FakeModel([draft_triage([draft_cause([manual_citation()])])])
+    triage(measured)
+    (request,) = measured.requests
+    fits_exactly = sum(len(block.label) + len(block.content) for block in request.untrusted)
+
+    with pytest.raises(InvalidRequestError, match=f"more than the limit of {fits_exactly}"):
+        run_triage(
+            fault_report(),
+            tenant_id="tenant-1",
+            device_id="device-1",
+            model=FakeModel([]),
+            documents=evidence,
+            history=evidence,
+            device_model="AquaHeat 12 Compact",
+            evidence_limit=fits_exactly,
+        )

@@ -1,0 +1,19 @@
+id = "hp-a12-largest-model"
+category = "model_variant"
+device_model = "Velmora AW-120"
+documents = ["velmora-aw-series-data-sheet"]
+
+[report]
+description = "A12 came up on the display this morning and the house is getting cold. What flow should the unit have?"
+language = "en"
+
+[expect]
+status = "ok"
+cause_terms = [["flow"], ["strainer", "pump"]]
+other_models = ["11 l/min", "16 l/min", "stage 2", "stage 3"]
+
+[[expect.evidence]]
+type = "document"
+document_id = "velmora-aw-series-data-sheet"
+page = 2
+anchor = "23 l/min"

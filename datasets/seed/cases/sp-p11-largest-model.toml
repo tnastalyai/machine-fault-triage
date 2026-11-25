@@ -1,0 +1,19 @@
+id = "sp-p11-largest-model"
+category = "model_variant"
+device_model = "Drennik TS-3200"
+documents = ["drennik-ts-series-data-sheet"]
+
+[report]
+description = "P11 keeps beeping on the terminal while spraying. Which filter insert should I bring?"
+language = "en"
+
+[expect]
+status = "ok"
+cause_terms = [["suction filter", "flow"]]
+other_models = ["38 l/min", "52 l/min", "50 mesh"]
+
+[[expect.evidence]]
+type = "document"
+document_id = "drennik-ts-series-data-sheet"
+page = 3
+anchor = "71 l/min"

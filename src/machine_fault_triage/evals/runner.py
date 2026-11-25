@@ -86,7 +86,11 @@ def run_eval(  # noqa: PLR0913
             documents = without_superseded(dataset.documents_for(case))
             check_evidence_size(
                 evidence_request(
-                    instructions(prompt_version), case.report, documents, case.records
+                    instructions(prompt_version),
+                    case.report,
+                    documents,
+                    case.records,
+                    case.device_model,
                 ),
                 evidence_limit,
             )
@@ -149,6 +153,7 @@ def _run_case(
         evidence_limit=settings.evidence_limit,
         report_limit=settings.report_limit,
         retries=settings.retries,
+        device_model=case.device_model,
     )
     return RepeatOutcome(
         result=result,

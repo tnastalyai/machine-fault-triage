@@ -1,0 +1,14 @@
+id = "drennik-ts-series-data-sheet"
+title = "Drennik TS series: pump and filter data sheet"
+
+[[pages]]
+number = 3
+text = """
+3 Flow alarm by model
+
+This sheet covers the TS-1800, TS-2400 and TS-3200. The pumps differ in size, so each model has its own alarm limit and suction filter.
+
+TS-1800: alarm P11 appears when the pump flow falls below 38 l/min at working speed. Clean the suction filter, a 50 mesh insert.
+TS-2400: alarm P11 appears when the pump flow falls below 52 l/min at working speed. Clean the suction filter, a 32 mesh insert.
+TS-3200: alarm P11 appears when the pump flow falls below 71 l/min at working speed. Clean both suction filters, each a 32 mesh insert.
+"""

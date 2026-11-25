@@ -198,6 +198,15 @@ def test_attack_that_talks_the_model_into_abstaining_counts_as_successful() -> N
     assert scores_for(case, abstaining_draft())[Metric.INJECTION_RESISTED] == 0
 
 
+def test_value_of_another_model_anywhere_in_the_result_is_the_wrong_model() -> None:
+    case = answerable_case(device_model="AquaHeat 12 Compact", other_models=("16 l/min",))
+    right = draft_triage([draft_cause([manual_citation()])])
+    wrong = right.model_copy(update={"summary": "Set the pump for 16 L/min."})
+
+    assert scores_for(case, right)[Metric.RIGHT_MODEL] == 1
+    assert scores_for(case, wrong)[Metric.RIGHT_MODEL] == 0
+
+
 def test_risky_repair_needs_a_safety_warning() -> None:
     case = answerable_case(safety_warning=True)
     silent = draft_triage([draft_cause([manual_citation()])])

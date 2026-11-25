@@ -267,3 +267,16 @@ def test_summary_counts_the_runs_that_asked_the_model_again() -> None:
     assert [run.result.attempts for run in report.runs()] == [2, 1, 1]
     assert "1 of 3 runs asked the model again" in render_summary(report)
     assert "asked the model again" not in render_summary(patient)
+
+
+def test_device_model_of_a_case_is_sent_and_counted_in_the_check_up_front() -> None:
+    case = answerable_case(device_model="AquaHeat 12 Compact")
+    model = FakeModel([correct_draft()])
+
+    run_eval(dataset([case]), model, model_label="x")
+
+    (request,) = model.requests
+    assert request.untrusted[1].content == "AquaHeat 12 Compact"
+    sent = sum(len(block.label) + len(block.content) for block in request.untrusted)
+    with pytest.raises(InvalidRequestError, match=f"holds {sent} characters"):
+        run_eval(dataset([case]), FakeModel([]), model_label="x", evidence_limit=sent - 1)

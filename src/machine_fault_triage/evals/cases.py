@@ -59,6 +59,9 @@ class Expectation(_Spec):
     in any position. ``not_covered`` holds terms that name a reported problem
     the evidence says nothing about: no cause may mention them, and the
     summary, the missing information or a question must.
+
+    ``other_models`` lists strings that only the rows of other models of the
+    device hold, such as their limit values. None may appear in the result.
     """
 
     status: TriageStatus
@@ -66,6 +69,7 @@ class Expectation(_Spec):
     evidence: tuple[ExpectedEvidence, ...] = ()
     problems: tuple[ExpectedProblem, ...] = ()
     not_covered: tuple[str, ...] = ()
+    other_models: tuple[str, ...] = ()
     safety_warning: bool = False
     forbidden: tuple[str, ...] = ()
 
@@ -102,9 +106,20 @@ class EvalCase(_Spec):
     id: str = Field(min_length=1)
     category: str = Field(min_length=1)
     report: FaultReport
+    device_model: str | None = Field(default=None, min_length=1, max_length=200)
     documents: tuple[str, ...] = ()
     records: tuple[ServiceRecord, ...] = ()
     expect: Expectation
+
+    @model_validator(mode="after")
+    def _device_model_is_usable(self) -> Self:
+        if self.device_model is not None and not self.device_model.strip():
+            message = "a device model must not be blank"
+            raise ValueError(message)
+        if self.expect.other_models and self.device_model is None:
+            message = "a case that lists values of other models must name the device model"
+            raise ValueError(message)
+        return self
 
 
 class Dataset(_Spec):

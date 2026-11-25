@@ -62,7 +62,9 @@ def write_dataset(root: Path, *, document: str = DOCUMENT_TOML, case: str = CASE
     return root
 
 
-def answerable_case(case_id: str = "e7", **expectation: object) -> EvalCase:
+def answerable_case(
+    case_id: str = "e7", *, device_model: str | None = None, **expectation: object
+) -> EvalCase:
     expect = {
         "status": TriageStatus.OK,
         "cause_terms": (("flow sensor", "flow switch"),),
@@ -73,6 +75,7 @@ def answerable_case(case_id: str = "e7", **expectation: object) -> EvalCase:
         id=case_id,
         category="code_in_manual",
         report=fault_report(),
+        device_model=device_model,
         documents=(MANUAL_ID,),
         expect=Expectation.model_validate(expect),
     )
