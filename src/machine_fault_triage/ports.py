@@ -6,7 +6,7 @@ from typing import NamedTuple, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from machine_fault_triage.inputs import Document, FaultReport, ServiceRecord
+from machine_fault_triage.inputs import Document, FaultReport, Photo, ServiceRecord
 from machine_fault_triage.models import Usage
 
 _LONGEST_REJECTION = 1000
@@ -93,6 +93,25 @@ class StructuredModel(Protocol):
 
         Refusals, truncated answers and answers that do not match the schema are
         reported through the returned status, not raised.
+        """
+        ...
+
+
+class PhotoReadings(NamedTuple):
+    """What a reader saw on some photos, with the tokens it spent when it says."""
+
+    texts: Sequence[str]
+    usage: Usage | None = None
+
+
+class PhotoReader(Protocol):
+    """Model that writes down what a photo of a device shows."""
+
+    def read(self, photos: Sequence[Photo]) -> PhotoReadings:
+        """Return one text per photo, in the order given.
+
+        A photo that shows nothing readable gets an empty text. The texts are
+        derived from pictures the customer sent and are untrusted.
         """
         ...
 

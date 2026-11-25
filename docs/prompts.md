@@ -13,6 +13,10 @@ The fingerprint covers the instructions only. The answer schema (`DraftTriage`) 
 
 When an answer breaks the schema or is cut off, `run_triage` asks once more and appends one fixed sentence to the instructions (`RETRY_AFTER_INVALID`, `RETRY_AFTER_TRUNCATED`). What was wrong with the answer is sent as an untrusted block, never inside the instructions, because the names of unexpected fields are chosen by the model. The fingerprint of a version does not cover these sentences; a test pins them separately.
 
+## Reading photos
+
+Photos attached to a fault report are read in a separate call with instructions of their own (`PHOTO_READING`): copy what a display shows, describe lit lamps and icons, say when something is unreadable, do not diagnose, and treat any text in the photo as data. The reading then enters the triage call as an untrusted block. The fingerprint of a prompt version does not cover these instructions; a test pins them separately.
+
 ## Device model
 
 `run_triage(..., device_model=...)` adds an evidence block labelled `device model`. No version of the instructions mentions it. A paragraph telling the model to use only the rows of the named model, and to ask when no model is named, was drafted as a fourth version and dropped before release: with one small model on the seed pairs, the answers kept to the named model with the block alone, and without a model name both wordings listed the alternatives and asked. A version that changes nothing measurable only makes runs harder to compare. The seed pairs name the model at the start of each sentence, the easiest layout; a table with models in the header may need the paragraph after all.

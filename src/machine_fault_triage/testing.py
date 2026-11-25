@@ -6,12 +6,14 @@ from collections.abc import Iterable, Mapping, Sequence
 from pydantic import BaseModel
 
 from machine_fault_triage.errors import TriageError
+from machine_fault_triage.inputs import Photo
 from machine_fault_triage.models import Usage
 from machine_fault_triage.ports import (
     Embeddings,
     Generation,
     GenerationRequest,
     GenerationStatus,
+    PhotoReadings,
 )
 
 
@@ -100,3 +102,24 @@ class FakeEmbedder:
             if word in text:
                 return vector
         return [0.0] * self._size
+
+
+class FakePhotoReader:
+    """A scripted photo reader that never touches the network.
+
+    Each photo consumes the next scripted reading. Calls are recorded.
+    """
+
+    def __init__(self, readings: Iterable[str], *, usage: Usage | None = None) -> None:
+        """Script the readings returned for successive photos, and the usage of each call."""
+        self._readings = deque(readings)
+        self._usage = usage
+        self.calls: list[list[Photo]] = []
+
+    def read(self, photos: Sequence[Photo]) -> PhotoReadings:
+        """Return the next scripted reading for each photo."""
+        self.calls.append(list(photos))
+        if len(self._readings) < len(photos):
+            message = "the fake photo reader has no scripted reading left"
+            raise FakeModelExhaustedError(message)
+        return PhotoReadings([self._readings.popleft() for _ in photos], self._usage)

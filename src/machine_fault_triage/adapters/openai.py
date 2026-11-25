@@ -1,5 +1,6 @@
 """OpenAI models behind the model and embedder ports. Needs the ``openai`` extra."""
 
+import base64
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -7,6 +8,7 @@ import openai
 from openai.types.responses import (
     EasyInputMessageParam,
     Response,
+    ResponseInputImageParam,
     ResponseInputMessageContentListParam,
     ResponseInputTextParam,
     ResponseTextConfigParam,
@@ -16,15 +18,18 @@ from pydantic import BaseModel, ValidationError
 
 from machine_fault_triage.adapters._evidence import OPENING, new_boundary, with_boundary_rule, wrap
 from machine_fault_triage.errors import ModelCallError
-from machine_fault_triage.models import Usage
+from machine_fault_triage.inputs import Photo
+from machine_fault_triage.models import Usage, total_usage
 from machine_fault_triage.ports import (
     Embeddings,
     Generation,
     GenerationRequest,
     GenerationStatus,
+    PhotoReadings,
     UntrustedBlock,
     rejection,
 )
+from machine_fault_triage.prompts import PHOTO_READING
 
 _EMBEDDING_BATCH = 32
 
@@ -154,6 +159,62 @@ class OpenAIEmbedder:
             raise ModelCallError(message) from error
         vectors = [item.embedding for item in sorted(response.data, key=lambda item: item.index)]
         return Embeddings(vectors, response.usage.total_tokens if response.usage else 0)
+
+
+class OpenAIPhotoReader:
+    """An OpenAI model that can see images, behind the ``PhotoReader`` port.
+
+    Each photo is read in a call of its own, so a reading can never be
+    attributed to another photo. The photo is sent to the API as given,
+    metadata included. Not yet tried on real photos of displays.
+    """
+
+    def __init__(
+        self, model: str, *, max_output_tokens: int = 1000, client: openai.OpenAI | None = None
+    ) -> None:
+        """Choose the model and the most tokens one reading may take.
+
+        Without ``client`` the SDK reads its credentials from the environment.
+        """
+        self._model = model
+        self._max_output_tokens = max_output_tokens
+        self._client = client or openai.OpenAI()
+
+    def read(self, photos: Sequence[Photo]) -> PhotoReadings:
+        """Return what each photo shows, in the order given.
+
+        A photo the model declines to read, or does not finish reading, gets
+        an empty text.
+
+        Raises:
+            ModelCallError: If an API call fails after the SDK's own retries.
+        """
+        texts = []
+        usages = []
+        for photo in photos:
+            try:
+                response = self._client.responses.create(
+                    model=self._model,
+                    instructions=PHOTO_READING,
+                    input=[EasyInputMessageParam(role="user", content=[_image(photo)])],
+                    max_output_tokens=self._max_output_tokens,
+                )
+            except openai.OpenAIError as error:
+                message = f"the OpenAI API call failed: {error}"
+                raise ModelCallError(message) from error
+            read = _status_without_output(response) is None
+            texts.append(response.output_text.strip() if read else "")
+            usages.append(_usage(response))
+        return PhotoReadings(texts, total_usage(usages))
+
+
+def _image(photo: Photo) -> ResponseInputImageParam:
+    encoded = base64.b64encode(photo.data).decode("ascii")
+    return ResponseInputImageParam(
+        type="input_image",
+        detail="high",
+        image_url=f"data:{photo.media_type};base64,{encoded}",
+    )
 
 
 def _status_without_output(response: Response) -> GenerationStatus | None:

@@ -2,7 +2,7 @@
 
 from machine_fault_triage.embeddings import CachedEmbedder
 from machine_fault_triage.errors import InvalidRequestError, TriageError
-from machine_fault_triage.inputs import Document, FaultReport, Page, ServiceRecord
+from machine_fault_triage.inputs import Document, FaultReport, Page, Photo, ServiceRecord
 from machine_fault_triage.models import (
     Cause,
     Citation,
@@ -26,6 +26,8 @@ from machine_fault_triage.ports import (
     HistoryProvider,
     PageRanker,
     PageSelector,
+    PhotoReader,
+    PhotoReadings,
     Selection,
     StructuredModel,
     TextSplitter,
@@ -57,6 +59,9 @@ __all__ = [
     "Page",
     "PageRanker",
     "PageSelector",
+    "Photo",
+    "PhotoReader",
+    "PhotoReadings",
     "Selection",
     "ServiceRecord",
     "StructuredModel",

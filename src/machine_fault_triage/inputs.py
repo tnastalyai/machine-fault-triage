@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from datetime import date
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -13,11 +13,27 @@ class _Input(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+class Photo(_Input):
+    """A picture attached to a fault report, such as the display of the device.
+
+    The bytes are passed on as given. Remove location and other metadata
+    before building a report if the photo may leave your systems.
+    """
+
+    model_config = ConfigDict(
+        frozen=True, extra="forbid", ser_json_bytes="base64", val_json_bytes="base64"
+    )
+
+    media_type: Literal["image/jpeg", "image/png", "image/webp"]
+    data: bytes = Field(min_length=1, repr=False)
+
+
 class FaultReport(_Input):
-    """What the customer reported, in their own words."""
+    """What the customer reported, in their own words, with any photos they attached."""
 
     description: str = Field(min_length=1)
     language: str = Field(min_length=2)
+    photos: tuple[Photo, ...] = ()
 
     @field_validator("description")
     @classmethod

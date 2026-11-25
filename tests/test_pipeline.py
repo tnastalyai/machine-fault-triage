@@ -9,7 +9,9 @@ from machine_fault_triage import (
     FaultReport,
     GenerationStatus,
     InvalidRequestError,
+    KeywordPageSelector,
     Page,
+    Photo,
     Selection,
     ServiceRecord,
     TriageResult,
@@ -19,8 +21,10 @@ from machine_fault_triage import (
     run_triage,
 )
 from machine_fault_triage.drafts import DraftTriage
+from machine_fault_triage.errors import ModelCallError
+from machine_fault_triage.ports import PhotoReadings
 from machine_fault_triage.prompts import RETRY_AFTER_INVALID, RETRY_AFTER_TRUNCATED, instructions
-from machine_fault_triage.testing import FakeModel
+from machine_fault_triage.testing import FakeModel, FakePhotoReader
 from tests.factories import (
     StaticEvidence,
     draft_cause,
@@ -689,3 +693,200 @@ def test_device_model_counts_towards_the_evidence_limit() -> None:
             device_model="AquaHeat 12 Compact",
             evidence_limit=fits_exactly,
         )
+
+
+PHOTO = Photo(media_type="image/jpeg", data=b"\xff\xd8 display")
+
+
+def report_with_photos(
+    count: int = 1, description: str = "The unit stopped heating."
+) -> FaultReport:
+    return FaultReport(description=description, language="en", photos=(PHOTO,) * count)
+
+
+def triage_photos(  # noqa: PLR0913
+    report: FaultReport,
+    model: FakeModel,
+    reader: FakePhotoReader | None,
+    *,
+    photo_limit: int = 5,
+    photo_size_limit: int = 5_000_000,
+    evidence_limit: int = 1_000_000,
+) -> TriageResult:
+    evidence = StaticEvidence([manual()])
+    return run_triage(
+        report,
+        tenant_id="tenant-1",
+        device_id="device-1",
+        model=model,
+        documents=evidence,
+        history=evidence,
+        photo_reader=reader,
+        photo_limit=photo_limit,
+        photo_size_limit=photo_size_limit,
+        evidence_limit=evidence_limit,
+    )
+
+
+def test_what_was_read_from_a_photo_reaches_the_model_as_evidence_and_the_result() -> None:
+    model = FakeModel([draft_triage([draft_cause([manual_citation()])])])
+    usage = Usage(input_tokens=700, output_tokens=20)
+    reader = FakePhotoReader(["Display shows E7.", ""], usage=usage)
+
+    result = triage_photos(report_with_photos(2), model, reader)
+
+    (request,) = model.requests
+    assert request.untrusted[1] == UntrustedBlock(
+        label="photo 1 of the fault report, as read by a model", content="Display shows E7."
+    )
+    assert [block.label for block in request.untrusted if block.label.startswith("photo 2")] == []
+    assert request.instructions == instructions()
+    assert result.photo_readings == ("Display shows E7.", "")
+    assert result.photo_usage == usage
+    assert reader.calls == [[PHOTO, PHOTO]]
+
+
+def test_code_shown_only_on_a_photo_finds_its_page() -> None:
+    pages = tuple(Page(number=n, text=f"Chapter {n}: mounting and clearances.") for n in (1, 2, 3))
+    code_page = Page(number=77, text="7.3 Error codes\nE7: flow sensor open or short circuit")
+    evidence = StaticEvidence([manual().model_copy(update={"pages": (*pages, code_page)})])
+
+    def sent_pages(reader: FakePhotoReader) -> list[str]:
+        model = FakeModel([draft_triage([draft_cause([manual_citation()])])])
+        run_triage(
+            report_with_photos(),
+            tenant_id="tenant-1",
+            device_id="device-1",
+            model=model,
+            documents=evidence,
+            history=evidence,
+            pages=KeywordPageSelector(1),
+            photo_reader=reader,
+        )
+        (request,) = model.requests
+        return [block.label for block in request.untrusted if block.label.startswith("document")]
+
+    (found,) = sent_pages(FakePhotoReader(["The display shows E7."]))
+    assert "page=77" in found
+    assert sent_pages(FakePhotoReader(["Nothing readable."])) == []
+
+
+def test_report_with_photos_and_no_reader_is_refused_before_the_model_is_called() -> None:
+    model = FakeModel([])
+
+    with pytest.raises(InvalidRequestError, match="no photo_reader was given"):
+        triage_photos(report_with_photos(), model, None)
+
+    assert model.requests == []
+
+
+@pytest.mark.parametrize(("photo_limit", "photo_size_limit"), [(1, 5_000_000), (5, 5)])
+def test_more_or_larger_photos_than_allowed_are_refused_before_anything_is_read(
+    photo_limit: int, photo_size_limit: int
+) -> None:
+    reader = FakePhotoReader(["Display shows E7."] * 2)
+
+    with pytest.raises(InvalidRequestError, match="the fault report has 2 photos, the largest of"):
+        triage_photos(
+            report_with_photos(2),
+            FakeModel([]),
+            reader,
+            photo_limit=photo_limit,
+            photo_size_limit=photo_size_limit,
+        )
+
+    assert reader.calls == []
+
+
+def test_reader_that_skips_a_photo_is_an_error_and_not_a_shifted_reading() -> None:
+    class Skipping:
+        def read(self, photos: Sequence[Photo]) -> PhotoReadings:
+            return PhotoReadings(["Display shows E7."] * (len(photos) - 1))
+
+    evidence = StaticEvidence([manual()])
+
+    with pytest.raises(ModelCallError, match="returned 1 readings for 2 photos"):
+        run_triage(
+            report_with_photos(2),
+            tenant_id="tenant-1",
+            device_id="device-1",
+            model=FakeModel([]),
+            documents=evidence,
+            history=evidence,
+            photo_reader=Skipping(),
+        )
+
+
+def test_photo_readings_are_kept_when_the_model_refuses_and_sent_again_on_a_retry() -> None:
+    refused = triage_photos(
+        report_with_photos(), FakeModel([GenerationStatus.REFUSED]), FakePhotoReader(["E7"])
+    )
+    model = FakeModel(
+        [GenerationStatus.TRUNCATED, draft_triage([draft_cause([manual_citation()])])]
+    )
+    reader = FakePhotoReader(["E7"])
+
+    triage_photos(report_with_photos(), model, reader)
+
+    first, second = model.requests
+    assert refused.photo_readings == ("E7",)
+    assert second.untrusted[: len(first.untrusted)] == first.untrusted
+    assert len(reader.calls) == 1
+
+
+def test_number_read_from_a_photo_is_not_an_unsupported_figure() -> None:
+    draft = draft_triage([draft_cause([manual_citation()])]).model_copy(
+        update={"summary": "The display shows 4500 hours."}
+    )
+
+    def figures(reading: str) -> tuple[str, ...]:
+        return triage_photos(
+            report_with_photos(), FakeModel([draft]), FakePhotoReader([reading])
+        ).unsupported_figures
+
+    assert figures("Nothing readable.") == ("4500",)
+    assert figures("Counter: 4500 h") == ()
+
+
+def test_overlong_reading_is_cut_and_counts_towards_the_evidence_limit() -> None:
+    reader = FakePhotoReader(["x" * 5_000])
+
+    with pytest.raises(InvalidRequestError, match="more than the limit of 2000"):
+        triage_photos(report_with_photos(), FakeModel([]), reader, evidence_limit=2_000)
+
+    result = triage_photos(
+        report_with_photos(),
+        FakeModel([draft_triage([draft_cause([manual_citation()])])]),
+        FakePhotoReader(["x" * 5_000]),
+    )
+    assert len(result.photo_readings[0]) == 2_000
+
+
+def test_report_without_photos_never_calls_the_reader() -> None:
+    reader = FakePhotoReader([])
+
+    result = triage_photos(
+        fault_report(), FakeModel([draft_triage([draft_cause([manual_citation()])])]), reader
+    )
+
+    assert reader.calls == []
+    assert result.photo_readings == ()
+    assert result.photo_usage is None
+
+
+def test_duplicate_service_records_are_refused_before_a_photo_is_read() -> None:
+    evidence = StaticEvidence([manual()], [service_record(), service_record()])
+    reader = FakePhotoReader(["Display shows E7."])
+
+    with pytest.raises(InvalidRequestError, match="two service records share the id"):
+        run_triage(
+            report_with_photos(),
+            tenant_id="tenant-1",
+            device_id="device-1",
+            model=FakeModel([]),
+            documents=evidence,
+            history=evidence,
+            photo_reader=reader,
+        )
+
+    assert reader.calls == []

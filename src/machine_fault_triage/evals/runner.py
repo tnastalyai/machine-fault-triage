@@ -74,13 +74,16 @@ def run_eval(  # noqa: PLR0913
     Raises:
         InvalidRequestError: If ``repeats`` is less than one, if ``retries``
             is negative, if no prompt has the given version, or if a case
-            exceeds ``report_limit`` or ``evidence_limit``.
+            exceeds ``report_limit`` or ``evidence_limit`` or has photos.
     """
     if repeats < 1 or retries < 0:
         message = "repeats must be at least 1 and retries must not be negative"
         raise InvalidRequestError(message)
     for case in dataset.cases:
         check_report_size(case.report, report_limit)
+        if case.report.photos:
+            message = f"case {case.id} has photos; an evaluation run does not read photos yet"
+            raise InvalidRequestError(message)
     if pages is None:
         for case in dataset.cases:
             documents = without_superseded(dataset.documents_for(case))
@@ -90,7 +93,7 @@ def run_eval(  # noqa: PLR0913
                     case.report,
                     documents,
                     case.records,
-                    case.device_model,
+                    device_model=case.device_model,
                 ),
                 evidence_limit,
             )

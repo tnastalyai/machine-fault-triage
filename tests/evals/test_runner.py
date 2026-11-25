@@ -11,6 +11,7 @@ from machine_fault_triage import (
     HybridPageSelector,
     InvalidRequestError,
     KeywordPageSelector,
+    Photo,
     Selection,
     TriageStatus,
     Usage,
@@ -280,3 +281,17 @@ def test_device_model_of_a_case_is_sent_and_counted_in_the_check_up_front() -> N
     sent = sum(len(block.label) + len(block.content) for block in request.untrusted)
     with pytest.raises(InvalidRequestError, match=f"holds {sent} characters"):
         run_eval(dataset([case]), FakeModel([]), model_label="x", evidence_limit=sent - 1)
+
+
+def test_case_with_photos_stops_the_run_before_any_model_call() -> None:
+    photo = Photo(media_type="image/png", data=b"pixels")
+    case = answerable_case()
+    with_photo = case.model_copy(
+        update={"report": case.report.model_copy(update={"photos": (photo,)})}
+    )
+    model = FakeModel([correct_draft()])
+
+    with pytest.raises(InvalidRequestError, match="does not read photos yet"):
+        run_eval(dataset([with_photo]), model, model_label="x")
+
+    assert model.requests == []

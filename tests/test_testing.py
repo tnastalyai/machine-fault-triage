@@ -1,9 +1,9 @@
 import pytest
 from pydantic import ValidationError
 
-from machine_fault_triage import Generation, GenerationRequest, GenerationStatus, Usage
+from machine_fault_triage import Generation, GenerationRequest, GenerationStatus, Photo, Usage
 from machine_fault_triage.drafts import DraftCause, DraftTriage
-from machine_fault_triage.testing import FakeModel, FakeModelExhaustedError
+from machine_fault_triage.testing import FakeModel, FakeModelExhaustedError, FakePhotoReader
 from tests.factories import draft_cause, draft_triage
 
 REQUEST = GenerationRequest(instructions="Diagnose the fault.")
@@ -53,3 +53,13 @@ def test_generation_cannot_complete_without_output() -> None:
 def test_generation_cannot_carry_output_unless_completed() -> None:
     with pytest.raises(ValidationError, match="exactly when it completed"):
         Generation[DraftCause](status=GenerationStatus.REFUSED, output=draft_cause())
+
+
+def test_fake_photo_reader_hands_out_readings_in_order_and_fails_when_it_runs_out() -> None:
+    photo = Photo(media_type="image/png", data=b"pixels")
+    reader = FakePhotoReader(["E7", "E8", "E9"], usage=Usage(input_tokens=5, output_tokens=1))
+
+    assert reader.read([photo, photo]).texts == ["E7", "E8"]
+    assert reader.read([photo]).usage == Usage(input_tokens=5, output_tokens=1)
+    with pytest.raises(FakeModelExhaustedError):
+        reader.read([photo])

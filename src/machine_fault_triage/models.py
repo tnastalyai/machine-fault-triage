@@ -1,5 +1,6 @@
 """Result models returned by a triage run."""
 
+from collections.abc import Iterable
 from datetime import date
 from enum import StrEnum
 from typing import Annotated, Literal, Self
@@ -115,6 +116,18 @@ class Usage(_Model):
     cached_input_tokens: int = Field(default=0, ge=0)
 
 
+def total_usage(usages: Iterable[Usage | None]) -> Usage | None:
+    """Add up the usage of several model calls, or return ``None`` if none reported any."""
+    reported = [usage for usage in usages if usage is not None]
+    if not reported:
+        return None
+    return Usage(
+        input_tokens=sum(usage.input_tokens for usage in reported),
+        output_tokens=sum(usage.output_tokens for usage in reported),
+        cached_input_tokens=sum(usage.cached_input_tokens for usage in reported),
+    )
+
+
 class TriageResult(_Model):
     """Structured hint for the technician produced by one triage run.
 
@@ -124,6 +137,9 @@ class TriageResult(_Model):
     ``failure`` says why the model answer was rejected, when the run failed
     because the answer did not match the schema. Treat it as untrusted text. ``attempts`` counts the
     model calls of the run; it is above one when an answer was asked for again.
+    ``photo_readings`` holds what the photo reader saw on each photo of the
+    report, in order, so that a person can compare it with the photo; it is
+    untrusted text too. ``photo_usage`` holds the tokens that reading spent.
     """
 
     status: TriageStatus
@@ -142,6 +158,8 @@ class TriageResult(_Model):
     embedding_tokens: int = Field(default=0, ge=0)
     failure: str | None = None
     attempts: int = Field(default=1, ge=1)
+    photo_readings: tuple[str, ...] = ()
+    photo_usage: Usage | None = None
 
     @model_validator(mode="after")
     def _status_matches_content(self) -> Self:

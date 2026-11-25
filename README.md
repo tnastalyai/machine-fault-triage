@@ -13,8 +13,8 @@ A technician usually learns what is wrong only after arriving on site, although 
 - **Grounded or flagged.** The model answers in a draft schema that has no `verified` field. The library checks every quote against the cited page, as whole words and at least three of them, and every service record against the supplied history. A cause without verified evidence drops to low confidence, and numbers in the answer that occur nowhere in the evidence are listed in `unsupported_figures` ([ADR 0001](docs/adr/0001-verify-citations-outside-the-model.md)).
 - **Abstention is a result.** `not_enough_data` with questions for the customer is a first-class outcome.
 - **Bounded and explained.** Inputs and the answer schema have size limits, an answer that breaks the schema is asked for again once, and a failed run names the fields that broke it.
-- **Untrusted input stays data.** Fault reports and document text reach the model only as `UntrustedBlock` values, apart from the instructions.
-- **Bring your own model and storage.** `StructuredModel`, `Embedder`, `DocumentProvider` and `HistoryProvider` are `typing.Protocol` interfaces. The core depends on no provider SDK.
+- **Untrusted input stays data.** Fault reports, document text and what was read from the customer's photos reach the model only as `UntrustedBlock` values, apart from the instructions.
+- **Bring your own model and storage.** `StructuredModel`, `Embedder`, `PhotoReader`, `DocumentProvider` and `HistoryProvider` are `typing.Protocol` interfaces. The core depends on no provider SDK.
 
 ## Architecture
 
@@ -127,14 +127,14 @@ Every result says what the run spent, so the calling application can log it per 
 usage = result.usage
 if usage is not None:
     print(usage.input_tokens, usage.cached_input_tokens, usage.output_tokens)
-print(result.embedding_tokens)
+print(result.embedding_tokens, result.photo_usage)
 ```
 
 ```text
-0
+0 None
 ```
 
-`usage` is `None` when the model adapter reports no tokens, as `FakeModel` does here. It is set for refused and truncated calls too, which are billed, and totals every attempt when an answer was asked for again (`result.attempts`). `cached_input_tokens` is the part of the input that the provider read from its prompt cache. `embedding_tokens` counts the fault report and the pages embedded for the first time; pages in the vector cache cost nothing.
+`usage` is `None` when the model adapter reports no tokens, as `FakeModel` does here. It is set for refused and truncated calls too, which are billed, and totals every attempt when an answer was asked for again (`result.attempts`). `cached_input_tokens` is the part of the input that the provider read from its prompt cache. `embedding_tokens` counts the fault report and the pages embedded for the first time; pages in the vector cache cost nothing. `photo_usage` holds the tokens of reading the photos of the report, kept apart because the reader can be another model at another price.
 
 ## Evaluation
 
@@ -154,6 +154,7 @@ uv run machine-fault-triage eval compare runs/baseline.json runs/sonnet.json
 
 - Verification proves that a quote exists on the page, not that it supports the cause.
 - `evidence_limit` and `report_limit` count characters, not tokens. The default of the first suits models with a large context window; set both for the models in use.
+- A report needs some text even when its photos say everything. A photo is read by a model, and nothing checks the reading: a misread code leads to verified quotes for the wrong code. `TriageResult.photo_readings` returns what was read so that a person can compare it with the photo. Photos are sent to the provider as given, metadata included; strip it first if that matters. The reader has been tried on one synthetic image, not on real photos of displays, and evaluation runs do not read photos.
 - `device_model` is passed to the model as evidence. Whether the answer kept to that model's row of a table is measured in evaluation (`right_model`), not verified in code, and page selection does not use the model name.
 - Checks, fixes and parts are free text. Only their numbers are compared with the evidence.
 - Quotes must be literal; a two-word table cell or text with OCR errors does not verify.

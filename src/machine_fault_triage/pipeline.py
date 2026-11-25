@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 
 from machine_fault_triage.drafts import DraftTriage
-from machine_fault_triage.errors import InvalidRequestError
+from machine_fault_triage.errors import InvalidRequestError, ModelCallError
 from machine_fault_triage.grounding import evidence_level, ground, unsupported_figures
 from machine_fault_triage.inputs import (
     Document,
@@ -11,7 +11,13 @@ from machine_fault_triage.inputs import (
     ServiceRecord,
     without_superseded,
 )
-from machine_fault_triage.models import EvidenceLevel, TriageResult, TriageStatus, Usage
+from machine_fault_triage.models import (
+    EvidenceLevel,
+    TriageResult,
+    TriageStatus,
+    Usage,
+    total_usage,
+)
 from machine_fault_triage.ports import (
     DocumentProvider,
     Generation,
@@ -19,6 +25,8 @@ from machine_fault_triage.ports import (
     GenerationStatus,
     HistoryProvider,
     PageSelector,
+    PhotoReader,
+    PhotoReadings,
     StructuredModel,
     UntrustedBlock,
 )
@@ -35,6 +43,7 @@ _STATUS_WITHOUT_OUTPUT = {
     GenerationStatus.INVALID: (TriageStatus.FAILED, "The model answer did not match the schema."),
 }
 _LONGEST_DEVICE_MODEL = 200
+_LONGEST_READING = 2000
 _RETRY_NOTES = {
     GenerationStatus.INVALID: RETRY_AFTER_INVALID,
     GenerationStatus.TRUNCATED: RETRY_AFTER_TRUNCATED,
@@ -55,6 +64,9 @@ def run_triage(  # noqa: PLR0913
     report_limit: int = 20_000,
     retries: int = 1,
     device_model: str | None = None,
+    photo_reader: PhotoReader | None = None,
+    photo_limit: int = 5,
+    photo_size_limit: int = 5_000_000,
 ) -> TriageResult:
     """Produce a grounded hint for the technician from one fault report.
 
@@ -70,9 +82,17 @@ def run_triage(  # noqa: PLR0913
     not mention it, page selection does not use it, and no check in code
     proves that the quoted row belongs to that model.
 
+    Photos of the report are read by ``photo_reader`` before pages are
+    selected, so that a code shown only on a photo can find its page. What
+    was read reaches the model as evidence and is returned in
+    ``photo_readings`` for a person to compare with the photos. A misread
+    code still leads to verified quotes, for the wrong code. ``photo_limit``
+    caps the photos of one report and ``photo_size_limit`` the bytes of each.
+
     The result carries the tokens the run spent, so that the caller can log
-    them per tenant and device: those of the model call in ``usage`` and
-    those of page selection in ``embedding_tokens``.
+    them per tenant and device: those of the model call in ``usage``, those
+    of page selection in ``embedding_tokens`` and those of reading the photos
+    in ``photo_usage``.
 
     ``evidence_limit`` caps the characters of evidence sent in one call, so
     that a request too large for the model is refused before it is paid for.
@@ -92,8 +112,10 @@ def run_triage(  # noqa: PLR0913
             ``device_model`` is blank or longer than 200 characters, if
             no prompt has the given version, if ``retries`` is negative, if
             two documents or two service records share an id, if the report
-            exceeds ``report_limit``, or if the evidence exceeds
-            ``evidence_limit``.
+            exceeds ``report_limit``, if it has photos and no
+            ``photo_reader`` is given or the photos exceed their limits, or
+            if the evidence exceeds ``evidence_limit``.
+        ModelCallError: If the photo reader does not return one text per photo.
     """
     check_report_size(report, report_limit)
     if retries < 0:
@@ -103,24 +125,35 @@ def run_triage(  # noqa: PLR0913
         message = "tenant_id and device_id must not be blank"
         raise InvalidRequestError(message)
     check_device_model(device_model)
+    check_photos(report, photo_limit, photo_size_limit, has_reader=photo_reader is not None)
     prompt = instructions(prompt_version)
     device_documents = without_superseded(
         documents.documents_for(tenant_id=tenant_id, device_id=device_id)
     )
     _check_unique("document", [document.id for document in device_documents])
-    embedding_tokens = 0
-    if pages is not None:
-        selection = pages.select(report, device_documents)
-        device_documents, embedding_tokens = selection.documents, selection.embedding_tokens
     records = history.records_for(tenant_id=tenant_id, device_id=device_id)
     _check_unique("service record", [record.id for record in records])
-    request = evidence_request(prompt, report, device_documents, records, device_model)
+    readings = _read_photos(report, photo_reader)
+    embedding_tokens = 0
+    if pages is not None:
+        selection = pages.select(_with_readings(report, readings.texts), device_documents)
+        device_documents, embedding_tokens = selection.documents, selection.embedding_tokens
+    request = evidence_request(
+        prompt,
+        report,
+        device_documents,
+        records,
+        device_model=device_model,
+        photo_readings=readings.texts,
+    )
     check_evidence_size(request, evidence_limit)
     generation, usages = _generate(model, request, retries)
     spent = {
-        "usage": _total(usages),
+        "usage": total_usage(usages),
         "embedding_tokens": embedding_tokens,
         "attempts": len(usages),
+        "photo_readings": tuple(readings.texts),
+        "photo_usage": readings.usage,
     }
     if generation.output is None:
         status, summary = _STATUS_WITHOUT_OUTPUT[generation.status]
@@ -154,17 +187,6 @@ def _again(request: GenerationRequest, rejected: Generation[DraftTriage]) -> Gen
     return GenerationRequest(
         instructions=request.instructions + _RETRY_NOTES[rejected.status],
         untrusted=(*request.untrusted, *reason),
-    )
-
-
-def _total(usages: Sequence[Usage | None]) -> Usage | None:
-    reported = [usage for usage in usages if usage is not None]
-    if not reported:
-        return None
-    return Usage(
-        input_tokens=sum(usage.input_tokens for usage in reported),
-        output_tokens=sum(usage.output_tokens for usage in reported),
-        cached_input_tokens=sum(usage.cached_input_tokens for usage in reported),
     )
 
 
@@ -205,6 +227,47 @@ def check_device_model(device_model: str | None) -> None:
         raise InvalidRequestError(message)
 
 
+def check_photos(report: FaultReport, limit: int, size_limit: int, *, has_reader: bool) -> None:
+    """Refuse photos that nothing would read, or more or larger photos than allowed.
+
+    Raises:
+        InvalidRequestError: If the report has photos and there is no reader,
+            more than ``limit`` photos, or a photo above ``size_limit`` bytes.
+    """
+    if not report.photos:
+        return
+    if not has_reader:
+        message = "the fault report has photos, but no photo_reader was given to read them"
+        raise InvalidRequestError(message)
+    largest = max(len(photo.data) for photo in report.photos)
+    if len(report.photos) > limit or largest > size_limit:
+        message = (
+            f"the fault report has {len(report.photos)} photos, the largest of {largest} bytes;"
+            f" the limits are {limit} photos of {size_limit} bytes each"
+        )
+        raise InvalidRequestError(message)
+
+
+def _read_photos(report: FaultReport, reader: PhotoReader | None) -> PhotoReadings:
+    if reader is None or not report.photos:
+        return PhotoReadings(())
+    readings = reader.read(report.photos)
+    if len(readings.texts) != len(report.photos):
+        message = (
+            f"the photo reader returned {len(readings.texts)} readings"
+            f" for {len(report.photos)} photos"
+        )
+        raise ModelCallError(message)
+    return PhotoReadings(tuple(text[:_LONGEST_READING] for text in readings.texts), readings.usage)
+
+
+def _with_readings(report: FaultReport, readings: Sequence[str]) -> FaultReport:
+    seen = [text for text in readings if text.strip()]
+    if not seen:
+        return report
+    return report.model_copy(update={"description": "\n".join((report.description, *seen))})
+
+
 def check_evidence_size(request: GenerationRequest, limit: int) -> None:
     """Refuse a request whose evidence is longer than ``limit`` characters.
 
@@ -220,14 +283,23 @@ def check_evidence_size(request: GenerationRequest, limit: int) -> None:
         raise InvalidRequestError(message)
 
 
-def evidence_request(
+def evidence_request(  # noqa: PLR0913
     prompt: str,
     report: FaultReport,
     documents: Sequence[Document],
     records: Sequence[ServiceRecord],
+    *,
     device_model: str | None = None,
+    photo_readings: Sequence[str] = (),
 ) -> GenerationRequest:
     """Build the one model call of a triage run: instructions and untrusted evidence."""
+    photos = tuple(
+        UntrustedBlock(
+            label=f"photo {number} of the fault report, as read by a model", content=text
+        )
+        for number, text in enumerate(photo_readings, start=1)
+        if text.strip()
+    )
     device = (
         ()
         if device_model is None
@@ -253,6 +325,7 @@ def evidence_request(
         instructions=prompt,
         untrusted=(
             UntrustedBlock(label="fault report", content=report.description),
+            *photos,
             *device,
             *pages,
             *history,
