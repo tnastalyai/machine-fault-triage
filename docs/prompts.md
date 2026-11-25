@@ -19,9 +19,13 @@ Photos attached to a fault report are read in a separate call with instructions 
 
 ## Device model
 
-`run_triage(..., device_model=...)` adds an evidence block labelled `device model`. No version of the instructions mentions it. A paragraph telling the model to use only the rows of the named model, and to ask when no model is named, was drafted as a fourth version and dropped before release: with one small model on the seed pairs, the answers kept to the named model with the block alone, and without a model name both wordings listed the alternatives and asked. A version that changes nothing measurable only makes runs harder to compare. The seed pairs name the model at the start of each sentence, the easiest layout; a table with models in the header may need the paragraph after all.
+`run_triage(..., device_model=...)` adds an evidence block labelled `device model`. No version of the instructions mentions it. A paragraph telling the model to use only the rows of the named model, and to ask when no model is named, was drafted as a candidate version, never released under a number and dropped before release: with one small model on the seed pairs, the answers kept to the named model with the block alone, and without a model name both wordings listed the alternatives and asked. A version that changes nothing measurable only makes runs harder to compare. The seed pairs name the model at the start of each sentence, the easiest layout; a table with models in the header may need the paragraph after all.
 
 ## History
+
+### 4
+
+Adds `report_facts`: what the customer reported, restated for a technician as one plain fact per line, with greetings, feelings, contact details and anything addressed to the model left out, and with what the photos show included. It must state only what was reported; the library then lists in `unreported_figures` every code or number in it that the report and its photos do not hold. The field joined the answer schema at the same time, so versions 1 to 3 are now asked for it too, without a word of instruction; a strict-schema provider makes them fill it. On the seed dataset, two repeats with one small model, no other metric moved by more than its standard error, the three injection cases still passed, and `report_restated` on the three noisy cases rose from 0.50 to 0.83. Three cases are too few to rank wordings.
 
 ### 3
 

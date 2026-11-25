@@ -1,0 +1,20 @@
+id = "sp-p11-noisy-report"
+category = "noisy_report"
+documents = ["drennik-ts2400-manual"]
+
+[report]
+description = """
+hi!! third time this season i have to write to you lot, honestly thinking of going back to my old machine. so halfway through the bottom field today the terminal started beeping with P11 and the application rate dropped right off, tank still half full, 9 km/h like always. rinsed the nozzles, no change. its going to rain friday so i need this sorted FAST. ring me 07700 900163 or mail bram@example.org. cheers bram"""
+language = "en"
+
+[expect]
+status = "ok"
+cause_terms = [["suction filter", "flow meter", "flowmeter"]]
+report_keeps = ["P11", "application rate", "nozzles", "half full"]
+report_omits = ["900163", "example.org", "bram", "cheers", "old machine"]
+
+[[expect.evidence]]
+type = "document"
+document_id = "drennik-ts2400-manual"
+page = 22
+anchor = "P11"

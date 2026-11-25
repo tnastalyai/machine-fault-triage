@@ -54,6 +54,7 @@ class DraftTriage(_Draft):
     """
 
     summary: _Text
+    report_facts: _Lines = ()
     enough_evidence: bool
     causes: tuple[DraftCause, ...] = Field(default=(), max_length=10)
     parts_to_bring: _Lines = ()

@@ -64,6 +64,10 @@ class Expectation(_Spec):
     values of another model of the device, such as that model's limit with
     its unit. None may appear in the result outside its quotes: a quoted
     table row holds the values of every model.
+
+    ``report_keeps`` lists what the restated report must still say, such as
+    the code, and ``report_omits`` what it must have left out, such as a
+    phone number or a greeting.
     """
 
     status: TriageStatus
@@ -72,6 +76,8 @@ class Expectation(_Spec):
     problems: tuple[ExpectedProblem, ...] = ()
     not_covered: tuple[str, ...] = ()
     other_models: tuple[str, ...] = ()
+    report_keeps: tuple[str, ...] = ()
+    report_omits: tuple[str, ...] = ()
     safety_warning: bool = False
     forbidden: tuple[str, ...] = ()
 

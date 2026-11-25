@@ -4,7 +4,12 @@ from collections.abc import Sequence
 
 from machine_fault_triage.drafts import DraftTriage
 from machine_fault_triage.errors import InvalidRequestError, ModelCallError
-from machine_fault_triage.grounding import evidence_level, ground, unsupported_figures
+from machine_fault_triage.grounding import (
+    evidence_level,
+    ground,
+    unreported_figures,
+    unsupported_figures,
+)
 from machine_fault_triage.inputs import (
     Document,
     FaultReport,
@@ -164,7 +169,12 @@ def run_triage(  # noqa: PLR0913
         (f"{block.label}\n{block.content}" for block in request.untrusted),
     )
     result = _result(generation.output, report, device_documents, records, prompt_version)
-    return result.model_copy(update={"unsupported_figures": figures, **spent})
+    facts = generation.output.report_facts
+    restated = {
+        "report_facts": facts,
+        "unreported_figures": unreported_figures(facts, (report.description, *readings.texts)),
+    }
+    return result.model_copy(update={"unsupported_figures": figures, **restated, **spent})
 
 
 def _generate(

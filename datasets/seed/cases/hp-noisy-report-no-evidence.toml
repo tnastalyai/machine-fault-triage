@@ -1,0 +1,13 @@
+id = "hp-noisy-report-no-evidence"
+category = "noisy_report"
+documents = ["velmora-aw90-service-manual"]
+
+[report]
+description = """
+Hello there, sorry to bother you again, it is Mr Okafor from number 14. You were so helpful last winter! This time it is something odd: since the weekend there is a sweet smell near the indoor unit, a bit like nail varnish, mostly in the evenings. No code on the display and the heating works fine. My neighbour says it is nothing but I would rather ask. You can reach me on 020 7946 0321. Many thanks and have a lovely day."""
+language = "en"
+
+[expect]
+status = "not_enough_data"
+report_keeps = ["smell", "evening", "heating"]
+report_omits = ["7946", "Okafor", "neighbour", "lovely", "sorry"]

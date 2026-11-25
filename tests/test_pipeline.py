@@ -890,3 +890,37 @@ def test_duplicate_service_records_are_refused_before_a_photo_is_read() -> None:
         )
 
     assert reader.calls == []
+
+
+def test_restated_report_is_returned_with_what_the_customer_did_not_report() -> None:
+    draft = draft_triage([draft_cause([manual_citation()])]).model_copy(
+        update={"report_facts": ("Display shows E7", "Unit stops heating", "Flow below 14 l/min")}
+    )
+
+    result = triage(FakeModel([draft]))
+
+    assert result.report_facts == draft.report_facts
+    assert result.unreported_figures == ("14",)
+
+
+def test_restated_report_is_returned_when_the_evidence_is_not_enough() -> None:
+    draft = DraftTriage(
+        summary="Nothing explains E9.", enough_evidence=False, report_facts=("Display shows E9",)
+    )
+
+    result = triage(FakeModel([draft]))
+
+    assert result.status is TriageStatus.NOT_ENOUGH_DATA
+    assert (result.report_facts, result.unreported_figures) == (("Display shows E9",), ("E9",))
+
+
+def test_code_read_from_a_photo_counts_as_reported() -> None:
+    draft = draft_triage([draft_cause([manual_citation()])]).model_copy(
+        update={"report_facts": ("Display shows A12",)}
+    )
+
+    result = triage_photos(
+        report_with_photos(), FakeModel([draft]), FakePhotoReader(["Display text: A12"])
+    )
+
+    assert result.unreported_figures == ()

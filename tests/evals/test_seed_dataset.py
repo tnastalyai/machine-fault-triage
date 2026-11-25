@@ -53,12 +53,17 @@ def expected_cause(problem: ExpectedProblem, dataset: Dataset) -> DraftCause:
 
 def answer_key(case: EvalCase, dataset: Dataset) -> DraftTriage:
     if case.expect.status is TriageStatus.NOT_ENOUGH_DATA:
-        return DraftTriage(summary="Not enough evidence.", enough_evidence=False)
+        return DraftTriage(
+            summary="Not enough evidence.",
+            enough_evidence=False,
+            report_facts=case.expect.report_keeps,
+        )
     expected_causes = case.expect.problems or (
         ExpectedProblem(cause_terms=case.expect.cause_terms, evidence=case.expect.evidence),
     )
     return DraftTriage(
         summary="Expected answer.",
+        report_facts=case.expect.report_keeps,
         enough_evidence=True,
         causes=tuple(expected_cause(problem, dataset) for problem in expected_causes),
         missing=case.expect.not_covered[:1],
@@ -75,12 +80,13 @@ def test_seed_dataset_covers_both_devices_and_the_planned_categories() -> None:
     dataset = load_dataset(SEED)
 
     categories = Counter(case.category for case in dataset.cases)
-    assert len(dataset.cases) == 26
+    assert len(dataset.cases) == 29
     assert categories["two_problems"] == 2
     assert categories["model_variant"] == categories["model_variant_table"] == 4
     assert {case.id.split("-")[0] for case in dataset.cases} == {"hp", "sp"}
     assert {"injection_report", "injection_document", "injection_history"} <= set(categories)
-    assert sum(case.expect.status is TriageStatus.NOT_ENOUGH_DATA for case in dataset.cases) == 5
+    assert sum(case.expect.status is TriageStatus.NOT_ENOUGH_DATA for case in dataset.cases) == 6
+    assert categories["noisy_report"] == 3
 
 
 def test_every_answerable_seed_case_names_the_evidence_for_its_answer() -> None:

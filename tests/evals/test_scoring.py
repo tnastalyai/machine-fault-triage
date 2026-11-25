@@ -51,6 +51,7 @@ def result_of(draft: DraftTriage) -> TriageResult:
         causes=causes,
         safety_warnings=draft.safety_warnings,
         missing=draft.missing,
+        report_facts=draft.report_facts,
     )
 
 
@@ -350,3 +351,25 @@ def test_retrieval_metrics_need_a_ranking_and_an_expected_page() -> None:
     assert scores[Metric.RETRIEVAL_RECALL] == 1
     assert Metric.RETRIEVAL_RECALL not in retrieval_scores(unanswerable_case(), [("manual-1", 77)])
     assert Metric.RETRIEVAL_RECALL not in scores_for(answerable_case(), abstaining_draft())
+
+
+@pytest.mark.parametrize(
+    ("facts", "unreported", "expected"),
+    [
+        (("Display shows E7", "Unit stops heating"), (), 1),
+        (("Unit stops heating",), (), 0),
+        (("Display shows E7", "Call 555 0142 after five"), (), 0),
+        (("Display shows E7", "Flow below 14 l/min"), ("14",), 0),
+        ((), (), 0),
+    ],
+)
+def test_restated_report_must_keep_the_code_drop_the_noise_and_add_no_figure(
+    facts: tuple[str, ...], unreported: tuple[str, ...], expected: int
+) -> None:
+    case = answerable_case(report_keeps=("e7",), report_omits=("0142",))
+    draft = draft_triage([draft_cause([manual_citation()])])
+    result = result_of(draft).model_copy(
+        update={"report_facts": facts, "unreported_figures": unreported}
+    )
+
+    assert score(case, draft, result, [manual()])[Metric.REPORT_RESTATED] == expected

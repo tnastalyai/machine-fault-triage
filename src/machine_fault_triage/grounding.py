@@ -17,6 +17,7 @@ from machine_fault_triage.models import (
 
 _SHORTEST_QUOTE = 3
 _SHORTEST_MOVED_QUOTE = 5
+_MARK = re.compile(r"[^\W_]*\d\w*(?:[.,/-]\w+)*")
 _FIGURE = re.compile(r"(?<![\w.,])\d+(?:[.,]\d+)?(?![.,]?\d)(?!\w)")
 
 
@@ -76,6 +77,27 @@ def unsupported_figures(answer: Iterable[str], evidence: Iterable[str]) -> tuple
     """
     known = set(_figures(evidence))
     return tuple(dict.fromkeys(figure for figure in _figures(answer) if figure not in known))
+
+
+def unreported_figures(facts: Iterable[str], reported: Iterable[str]) -> tuple[str, ...]:
+    """List the codes and numbers in the restated facts that the customer did not report.
+
+    Anything that holds a digit is compared, with case and separators set
+    aside, so ``A-12`` is found in a report that says ``a12``. A single digit
+    is not checked. A value listed here came from somewhere else, such as a
+    page of the manual or the model's memory.
+    """
+    known = "|".join(_squash(text) for text in reported)
+    marks = (mark for fact in facts for mark in _MARK.findall(fact))
+    return tuple(
+        dict.fromkeys(
+            mark for mark in marks if len(_squash(mark)) > 1 and _squash(mark) not in known
+        )
+    )
+
+
+def _squash(text: str) -> str:
+    return re.sub(r"[\W_]+", "", text.casefold())
 
 
 def _ground_cause(

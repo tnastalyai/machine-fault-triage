@@ -14,6 +14,7 @@ from machine_fault_triage.grounding import (
     contains_quote,
     evidence_level,
     ground,
+    unreported_figures,
     unsupported_figures,
 )
 from tests.factories import (
@@ -241,3 +242,15 @@ def test_citation_says_when_its_page_was_recognised_from_an_image() -> None:
         (True, PageSource.TEXT_LAYER),
         (True, PageSource.OCR),
     ]
+
+
+def test_code_or_number_the_customer_did_not_report_is_listed_once() -> None:
+    reported = ["hello, a12 came up and the flow is 23.5 l/min on my AW 90", "Display text: 21 C"]
+    facts = [
+        "Display shows A-12 and 21 °C",
+        "Flow 23,5 l/min, limit 14 l/min",
+        "Model AW-90, switch FS1 open for 3 days",
+        "Limit 14 l/min again",
+    ]
+
+    assert unreported_figures(facts, reported) == ("14", "FS1")

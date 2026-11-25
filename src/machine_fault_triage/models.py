@@ -164,6 +164,10 @@ class TriageResult(_Model):
     questions_for_customer: tuple[str, ...] = ()
     missing: tuple[str, ...] = ()
     unsupported_figures: tuple[str, ...] = ()
+    report_facts: tuple[str, ...] = ()
+    """What the customer reported, one plain fact per line, as restated by the model."""
+    unreported_figures: tuple[str, ...] = ()
+    """Codes and numbers in ``report_facts`` that the report and its photos do not hold."""
     prompt_version: int | None = None
     usage: Usage | None = None
     embedding_tokens: int = Field(default=0, ge=0)

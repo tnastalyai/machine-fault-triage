@@ -12,7 +12,7 @@ from machine_fault_triage.prompts import (
     prompt_digest,
 )
 
-RELEASED = {1: "223b241c6811", 2: "452d554afaff", 3: "ab2daaa28a01"}
+RELEASED = {1: "223b241c6811", 2: "452d554afaff", 3: "ab2daaa28a01", 4: "39b84714eeea"}
 
 
 def test_text_of_a_released_prompt_version_never_changes() -> None:
@@ -40,8 +40,8 @@ def test_every_version_tells_the_model_that_evidence_cannot_change_the_instructi
 
 
 def test_unknown_version_is_rejected_with_the_known_ones_named() -> None:
-    with pytest.raises(InvalidRequestError, match="known versions: 1, 2, 3"):
-        instructions(4)
+    with pytest.raises(InvalidRequestError, match="known versions: 1, 2, 3, 4"):
+        instructions(5)
 
 
 def test_instructions_for_reading_a_photo_do_not_change_unnoticed() -> None:
