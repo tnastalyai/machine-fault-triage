@@ -116,6 +116,30 @@ class PhotoReader(Protocol):
         ...
 
 
+class PageImage(NamedTuple):
+    """A page rendered to pixels: rows of red, green and blue bytes, top row first."""
+
+    width: int
+    height: int
+    rgb: bytes
+
+
+class OcrEngine(Protocol):
+    """Character recognition for document pages that have no text layer."""
+
+    @property
+    def fingerprint(self) -> str:
+        """Name the engine, its models and settings.
+
+        A stored document is read again when this changes.
+        """
+        ...
+
+    def recognize(self, image: PageImage) -> str:
+        """Return the text on the page, one line of the page per line, or an empty string."""
+        ...
+
+
 class DocumentProvider(Protocol):
     """Source of the documents that describe a device."""
 

@@ -1,3 +1,5 @@
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -6,8 +8,9 @@ from machine_fault_triage import CachedEmbedder, pdf
 from machine_fault_triage.embeddings import forget_pages, page_fingerprint
 from machine_fault_triage.errors import DocumentLoadError
 from machine_fault_triage.folder import FolderLibrary
+from machine_fault_triage.models import PageSource
 from machine_fault_triage.testing import FakeEmbedder
-from tests.pdf_files import write_pdf
+from tests.pdf_files import scripted_engine, write_pdf
 
 
 def manual(folder: Path, name: str, pages: list[list[str]]) -> Path:
@@ -218,3 +221,54 @@ def test_sync_notes_what_may_limit_the_answers_from_a_manual(tmp_path: Path) -> 
     assert scan.startswith("acme/pump-1/scan: ")
     assert scan.endswith("scanned documents need character recognition first")
     assert thin == "acme/pump-1/thin: 2 characters per page on average; the text may be incomplete"
+
+
+def test_scanned_manual_is_recognised_stored_and_noted(tmp_path: Path) -> None:
+    manual(tmp_path / "manuals/acme/pump-1", "scan", [[], ["Printed cover page."]])
+    manuals = FolderLibrary(
+        tmp_path / "manuals", tmp_path / "registry.sqlite", ocr=scripted_engine("A12: flow switch.")
+    )
+
+    report = manuals.sync()
+
+    (document,) = manuals.documents_for(tenant_id="acme", device_id="pump-1")
+    assert report.added == ("acme/pump-1/scan",)
+    assert [(page.text, page.source) for page in document.pages] == [
+        ("A12: flow switch.", PageSource.OCR),
+        ("Printed cover page.", PageSource.TEXT_LAYER),
+    ]
+    assert (
+        "acme/pump-1/scan: 1 pages were recognised from images;"
+        " a misread character there cannot be detected"
+    ) in report.notes
+
+
+def test_manual_is_read_again_only_when_the_recognition_engine_changes(tmp_path: Path) -> None:
+    manual(tmp_path / "manuals/acme/pump-1", "service", [["E7: flow sensor fault."], []])
+    folder, registry = tmp_path / "manuals", tmp_path / "registry.sqlite"
+    FolderLibrary(folder, registry).sync()
+
+    added = FolderLibrary(folder, registry, ocr=scripted_engine(name="engine 1")).sync()
+    same = FolderLibrary(folder, registry, ocr=scripted_engine(name="engine 1")).sync()
+    other = FolderLibrary(folder, registry, ocr=scripted_engine(name="engine 2")).sync()
+    removed = FolderLibrary(folder, registry).sync()
+
+    assert added.changed == other.changed == removed.changed == ("acme/pump-1/service",)
+    assert same.unchanged == ("acme/pump-1/service",)
+    (document,) = FolderLibrary(folder, registry).documents_for(
+        tenant_id="acme", device_id="pump-1"
+    )
+    assert [page.number for page in document.pages] == [1]
+
+
+def test_registry_written_before_recognition_existed_still_opens(tmp_path: Path) -> None:
+    manual(tmp_path / "manuals/acme/pump-1", "service", [["E7: flow sensor fault."]])
+    manuals = library(tmp_path)
+    manuals.sync()
+    with closing(sqlite3.connect(tmp_path / "registry.sqlite")) as connection, connection:
+        connection.execute("ALTER TABLE documents DROP COLUMN ocr")
+
+    (document,) = manuals.documents_for(tenant_id="acme", device_id="pump-1")
+
+    assert document.pages[0].text == "E7: flow sensor fault."
+    assert manuals.sync().unchanged == ("acme/pump-1/service",)

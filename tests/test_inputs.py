@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from machine_fault_triage import Document, FaultReport, Page, Photo
+from machine_fault_triage import Document, FaultReport, Page, PageSource, Photo
 
 
 @pytest.mark.parametrize("description", ["", "   ", "\n\t"])
@@ -36,3 +36,11 @@ def test_photo_must_be_an_image_of_a_known_type_and_not_empty() -> None:
         Photo.model_validate({"media_type": "application/pdf", "data": b"%PDF"})
     with pytest.raises(ValidationError):
         Photo(media_type="image/jpeg", data=b"")
+
+
+def test_page_stored_before_sources_existed_loads_as_text_layer() -> None:
+    stored = Page.model_validate_json('{"number": 3, "text": "E7: flow sensor fault."}')
+    recognised = Page(number=3, text="E7: flow sensor fault.", source=PageSource.OCR)
+
+    assert stored.source is PageSource.TEXT_LAYER
+    assert Page.model_validate_json(recognised.model_dump_json()) == recognised

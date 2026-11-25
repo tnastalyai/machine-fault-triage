@@ -6,7 +6,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from machine_fault_triage.models import HistoryScope
+from machine_fault_triage.models import HistoryScope, PageSource
 
 
 class _Input(BaseModel):
@@ -45,10 +45,16 @@ class FaultReport(_Input):
 
 
 class Page(_Input):
-    """Extracted text of one document page."""
+    """Extracted text of one document page.
+
+    ``source`` says whether the text was stored in the file or recognised
+    from an image of the page. Recognised text can hold misread characters
+    that nothing in the library can detect.
+    """
 
     number: int = Field(ge=1)
     text: str
+    source: PageSource = PageSource.TEXT_LAYER
 
 
 class Document(_Input):

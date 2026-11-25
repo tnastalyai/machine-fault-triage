@@ -12,6 +12,7 @@ from machine_fault_triage.models import (
     DocumentCitation,
     EvidenceLevel,
     HistoryCitation,
+    PageSource,
 )
 
 _SHORTEST_QUOTE = 3
@@ -123,6 +124,7 @@ def _ground_document_citation(
         verified=page is not None
         and len(draft.quote.split()) >= _SHORTEST_QUOTE
         and contains_quote(page.text, draft.quote),
+        source=page.source if page is not None else PageSource.TEXT_LAYER,
     )
 
 

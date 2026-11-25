@@ -17,6 +17,13 @@ class TriageStatus(StrEnum):
     FAILED = "failed"
 
 
+class PageSource(StrEnum):
+    """Where the text of a document page came from."""
+
+    TEXT_LAYER = "text_layer"
+    OCR = "ocr"
+
+
 class EvidenceLevel(StrEnum):
     """Strongest kind of evidence the result rests on."""
 
@@ -55,6 +62,8 @@ class DocumentCitation(_Model):
     section: str | None = None
     quote: str = Field(min_length=1)
     verified: bool = False
+    source: PageSource = PageSource.TEXT_LAYER
+    """``ocr`` when the cited page was recognised from an image and may hold misreads."""
 
 
 class HistoryCitation(_Model):

@@ -1,6 +1,8 @@
 from collections.abc import Sequence
 from pathlib import Path
 
+from machine_fault_triage.testing import FakeOcrEngine
+
 
 def write_pdf(path: Path, pages: Sequence[Sequence[str]]) -> Path:
     kids = " ".join(f"{3 + 2 * index} 0 R" for index in range(len(pages)))
@@ -30,3 +32,9 @@ def write_pdf(path: Path, pages: Sequence[Sequence[str]]) -> Path:
     )
     path.write_bytes(content.encode("latin-1"))
     return path
+
+
+def scripted_engine(
+    text: str = "E7: flow sensor fault.", name: str = "fake engine"
+) -> FakeOcrEngine:
+    return FakeOcrEngine([text] * 20, fingerprint=name)

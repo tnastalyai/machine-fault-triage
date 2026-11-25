@@ -3,7 +3,13 @@ from pydantic import ValidationError
 
 from machine_fault_triage import Generation, GenerationRequest, GenerationStatus, Photo, Usage
 from machine_fault_triage.drafts import DraftCause, DraftTriage
-from machine_fault_triage.testing import FakeModel, FakeModelExhaustedError, FakePhotoReader
+from machine_fault_triage.ports import PageImage
+from machine_fault_triage.testing import (
+    FakeModel,
+    FakeModelExhaustedError,
+    FakeOcrEngine,
+    FakePhotoReader,
+)
 from tests.factories import draft_cause, draft_triage
 
 REQUEST = GenerationRequest(instructions="Diagnose the fault.")
@@ -63,3 +69,16 @@ def test_fake_photo_reader_hands_out_readings_in_order_and_fails_when_it_runs_ou
     assert reader.read([photo]).usage == Usage(input_tokens=5, output_tokens=1)
     with pytest.raises(FakeModelExhaustedError):
         reader.read([photo])
+
+
+def test_fake_ocr_engine_hands_out_texts_in_order_and_fails_when_it_runs_out() -> None:
+    image = PageImage(width=1, height=1, rgb=b"\xff\xff\xff")
+    engine = FakeOcrEngine(["E7"], fingerprint="engine 1")
+
+    assert (engine.recognize(image), engine.fingerprint, engine.images) == (
+        "E7",
+        "engine 1",
+        [image],
+    )
+    with pytest.raises(FakeModelExhaustedError):
+        engine.recognize(image)

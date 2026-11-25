@@ -465,3 +465,29 @@ def test_chunk_size_without_the_chunking_extra_says_what_to_install(
 
     assert exit_code == 2
     assert "needs the chunking extra" in capsys.readouterr().err
+
+
+def test_library_sync_recognises_scanned_pages_with_the_given_engine(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "manuals/acme/pump-1/scan.pdf"
+    path.parent.mkdir(parents=True)
+    write_pdf(path, [[]])
+
+    exit_code = sync(
+        tmp_path, "--ocr", "tests.pdf_files:scripted_engine", "--ocr-option", "text=" + "A12 " * 60
+    )
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == (
+        "added     acme/pump-1/scan\n"
+        "note      acme/pump-1/scan: 1 pages were recognised from images;"
+        " a misread character there cannot be detected\n"
+    )
+
+
+def test_library_sync_with_an_unloadable_engine_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert sync(tmp_path, "--ocr", "tests.pdf_files:absent") == 2
+    assert "cannot load the recognition engine from" in capsys.readouterr().err

@@ -13,6 +13,7 @@ from machine_fault_triage.ports import (
     Generation,
     GenerationRequest,
     GenerationStatus,
+    PageImage,
     PhotoReadings,
 )
 
@@ -123,3 +124,29 @@ class FakePhotoReader:
             message = "the fake photo reader has no scripted reading left"
             raise FakeModelExhaustedError(message)
         return PhotoReadings([self._readings.popleft() for _ in photos], self._usage)
+
+
+class FakeOcrEngine:
+    """A scripted recognition engine that reads no pixels.
+
+    Each page consumes the next scripted text. The images are recorded.
+    """
+
+    def __init__(self, texts: Iterable[str], *, fingerprint: str = "fake engine") -> None:
+        """Script the text returned for successive pages, and the engine's fingerprint."""
+        self._texts = deque(texts)
+        self._fingerprint = fingerprint
+        self.images: list[PageImage] = []
+
+    @property
+    def fingerprint(self) -> str:
+        """The scripted fingerprint."""
+        return self._fingerprint
+
+    def recognize(self, image: PageImage) -> str:
+        """Return the next scripted text."""
+        self.images.append(image)
+        if not self._texts:
+            message = "the fake recognition engine has no scripted text left"
+            raise FakeModelExhaustedError(message)
+        return self._texts.popleft()

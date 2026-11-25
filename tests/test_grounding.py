@@ -1,6 +1,12 @@
 import pytest
 
-from machine_fault_triage import Confidence, DocumentCitation, EvidenceLevel, HistoryCitation
+from machine_fault_triage import (
+    Confidence,
+    DocumentCitation,
+    EvidenceLevel,
+    HistoryCitation,
+    PageSource,
+)
 from machine_fault_triage.drafts import DraftDocumentCitation
 from machine_fault_triage.grounding import (
     contains_quote,
@@ -159,3 +165,24 @@ def test_decimal_comma_and_point_name_the_same_number() -> None:
 
 def test_single_digits_are_not_checked() -> None:
     assert unsupported_figures(["Check 3 things in step 2."], ["No numbers here."]) == ()
+
+
+def test_citation_says_when_its_page_was_recognised_from_an_image() -> None:
+    printed = manual()
+    scanned = printed.model_copy(
+        update={
+            "pages": tuple(
+                page.model_copy(update={"source": PageSource.OCR}) for page in printed.pages
+            )
+        }
+    )
+
+    sources = [
+        ground([draft_cause([manual_citation()])], [document], [])[0].citations[0]
+        for document in (printed, scanned)
+    ]
+
+    assert [(c.verified, getattr(c, "source", None)) for c in sources] == [
+        (True, PageSource.TEXT_LAYER),
+        (True, PageSource.OCR),
+    ]

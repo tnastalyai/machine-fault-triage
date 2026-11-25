@@ -13,6 +13,8 @@ from machine_fault_triage import pdf
 from machine_fault_triage.embeddings import page_fingerprint
 from machine_fault_triage.errors import DocumentLoadError
 from machine_fault_triage.inputs import Document
+from machine_fault_triage.models import PageSource
+from machine_fault_triage.ports import OcrEngine
 
 _TABLE = """
 CREATE TABLE IF NOT EXISTS documents (
@@ -23,9 +25,11 @@ CREATE TABLE IF NOT EXISTS documents (
     extraction INTEGER NOT NULL,
     synced_at TEXT NOT NULL,
     document TEXT NOT NULL,
+    ocr TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (tenant, device, name)
 )
 """
+_OCR_COLUMN = "ALTER TABLE documents ADD COLUMN ocr TEXT NOT NULL DEFAULT ''"
 
 _SOURCE = "CREATE TABLE IF NOT EXISTS source (folder TEXT NOT NULL)"
 
@@ -67,17 +71,26 @@ class FolderLibrary:
     manuals: keep it where the manuals may be kept.
     """
 
-    def __init__(self, folder: Path, registry: Path) -> None:
-        """Choose the folder of manuals and the registry file, created on first use."""
+    def __init__(self, folder: Path, registry: Path, *, ocr: OcrEngine | None = None) -> None:
+        """Choose the folder of manuals and the registry file, created on first use.
+
+        With ``ocr``, pages without a text layer are recognised during a
+        sync. Every manual is read once more when the engine is added,
+        changed or taken away, so that the registry never mixes the text of
+        two engines.
+        """
         self._folder = folder
         self._registry = registry
+        self._ocr = ocr
 
     def sync(self) -> SyncReport:
         """Bring the registry in line with the folder, in one transaction.
 
-        A file is read again when its content changed or when ``load_pdf``
-        has changed how it extracts text. A file that cannot be read is
-        reported as failed and does not stop the others.
+        A file is read again when its content changed, when ``load_pdf`` has
+        changed how it extracts text, or when the recognition engine changed.
+        A file that cannot be read is reported as failed and does not stop
+        the others. Recognition takes about a second a page, and nothing is
+        stored until the whole sync has finished.
 
         Raises:
             DocumentLoadError: If the folder is missing or unreadable, if it
@@ -91,11 +104,12 @@ class FolderLibrary:
             name: [] for name in ("added", "changed", "removed", "unchanged", "failed", "notes")
         }
         with closing(sqlite3.connect(self._registry)) as connection, connection:
-            connection.execute(_TABLE)
+            _prepare(connection)
+            engine = self._ocr.fingerprint if self._ocr else ""
             stored = {
-                (tenant, device, name): (file_hash, extraction)
-                for tenant, device, name, file_hash, extraction in connection.execute(
-                    "SELECT tenant, device, name, file_hash, extraction FROM documents"
+                (tenant, device, name): (file_hash, extraction, ocr)
+                for tenant, device, name, file_hash, extraction, ocr in connection.execute(
+                    "SELECT tenant, device, name, file_hash, extraction, ocr FROM documents"
                 )
             }
             self._check_source(connection, has_files=bool(files), has_stored=bool(stored))
@@ -107,12 +121,12 @@ class FolderLibrary:
                     outcome["failed"].append("/".join(key))
                     outcome["notes"].append(f"{'/'.join(key)}: {error.strerror}")
                     continue
-                state = (hashlib.sha256(content).hexdigest(), pdf.EXTRACTION_VERSION)
+                state = (hashlib.sha256(content).hexdigest(), pdf.EXTRACTION_VERSION, engine)
                 if stored.get(key) == state:
                     outcome["unchanged"].append("/".join(key))
                     continue
                 try:
-                    document = pdf.load_pdf(path, document_id=key[2], title=key[2])
+                    document = pdf.load_pdf(path, document_id=key[2], title=key[2], ocr=self._ocr)
                 except DocumentLoadError as error:
                     outcome["failed"].append("/".join(key))
                     outcome["notes"].append(f"{'/'.join(key)}: {error}")
@@ -120,7 +134,9 @@ class FolderLibrary:
                 outcome["notes"].extend(_limits("/".join(key), document))
                 outcome["changed" if key in stored else "added"].append("/".join(key))
                 connection.execute(
-                    "INSERT OR REPLACE INTO documents VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT OR REPLACE INTO documents"
+                    " (tenant, device, name, file_hash, extraction, ocr, synced_at, document)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (*key, *state, datetime.now(UTC).isoformat(), document.model_dump_json()),
                 )
             for key in sorted(stored.keys() - files.keys()):
@@ -134,7 +150,7 @@ class FolderLibrary:
     def documents_for(self, *, tenant_id: str, device_id: str) -> Sequence[Document]:
         """Return the manuals of one device of one tenant, as of the last sync."""
         with closing(sqlite3.connect(self._registry)) as connection, connection:
-            connection.execute(_TABLE)
+            _prepare(connection)
             rows = connection.execute(
                 "SELECT document FROM documents WHERE tenant = ? AND device = ? ORDER BY name",
                 (tenant_id, device_id),
@@ -169,8 +185,21 @@ class FolderLibrary:
                         yield (tenant.name, device.name, path.stem), path
 
 
+def _prepare(connection: sqlite3.Connection) -> None:
+    connection.execute(_TABLE)
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(documents)")}
+    if "ocr" not in columns:
+        connection.execute(_OCR_COLUMN)
+
+
 def _limits(name: str, document: Document) -> list[str]:
     notes = []
+    recognised = sum(page.source is PageSource.OCR for page in document.pages)
+    if recognised:
+        notes.append(
+            f"{name}: {recognised} pages were recognised from images;"
+            " a misread character there cannot be detected"
+        )
     without_text = document.pages[-1].number - len(document.pages)
     if without_text:
         notes.append(f"{name}: {without_text} pages have no text and cannot be searched or quoted")

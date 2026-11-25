@@ -49,6 +49,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     sync.add_argument("--registry", type=Path, required=True, help="registry file to update")
     sync.add_argument(
+        "--ocr",
+        metavar="MODULE:CALLABLE",
+        help="import path of a callable that returns the engine recognising pages without text",
+    )
+    sync.add_argument(
+        "--ocr-option",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="keyword argument passed to the engine callable, repeatable",
+    )
+    sync.add_argument(
         "--embedding-cache",
         type=Path,
         metavar="FILE",
@@ -199,7 +211,10 @@ def _sync(arguments: argparse.Namespace) -> str:
     except ImportError as error:
         message = f"library sync needs the pdf extra: {error}"
         raise InvalidRequestError(message) from error
-    report = folder.FolderLibrary(arguments.folder, arguments.registry).sync()
+    ocr = (
+        _load("recognition engine", arguments.ocr, arguments.ocr_option) if arguments.ocr else None
+    )
+    report = folder.FolderLibrary(arguments.folder, arguments.registry, ocr=ocr).sync()
     lines = [
         f"{state:<9} {name}"
         for state in ("added", "changed", "removed", "failed", "unchanged")

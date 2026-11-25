@@ -39,6 +39,10 @@ pdf = [
 chunking = [
     "chonkie>=1.7.0",
 ]
+ocr = [
+    "onnxruntime>=1.32.0",
+    "rapidocr>=3.10.0",
+]
 
 [dependency-groups]
 dev = [
@@ -81,7 +85,7 @@ files = ["src", "tests"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = "pypdfium2.*"
+module = ["pypdfium2.*", "rapidocr.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

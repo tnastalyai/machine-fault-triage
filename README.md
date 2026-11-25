@@ -14,7 +14,7 @@ A technician usually learns what is wrong only after arriving on site, although 
 - **Abstention is a result.** `not_enough_data` with questions for the customer is a first-class outcome.
 - **Bounded and explained.** Inputs and the answer schema have size limits, an answer that breaks the schema is asked for again once, and a failed run names the fields that broke it.
 - **Untrusted input stays data.** Fault reports, document text and what was read from the customer's photos reach the model only as `UntrustedBlock` values, apart from the instructions.
-- **Bring your own model and storage.** `StructuredModel`, `Embedder`, `PhotoReader`, `DocumentProvider` and `HistoryProvider` are `typing.Protocol` interfaces. The core depends on no provider SDK.
+- **Bring your own model and storage.** `StructuredModel`, `Embedder`, `PhotoReader`, `OcrEngine`, `DocumentProvider` and `HistoryProvider` are `typing.Protocol` interfaces. The core depends on no provider SDK.
 
 ## Architecture
 
@@ -157,14 +157,14 @@ uv run machine-fault-triage eval compare runs/baseline.json runs/sonnet.json
 - A report needs some text even when its photos say everything. A photo is read by a model, and nothing checks the reading: a misread code leads to verified quotes for the wrong code. `TriageResult.photo_readings` returns what was read so that a person can compare it with the photo. Photos are sent to the provider as given, metadata included; strip it first if that matters. The reader has been tried on one synthetic image, not on real photos of displays, and evaluation runs do not read photos.
 - `device_model` is passed to the model as evidence. Whether the answer kept to that model's row of a table is measured in evaluation (`right_model`), not verified in code, and page selection does not use the model name.
 - Checks, fixes and parts are free text. Only their numbers are compared with the evidence.
-- Quotes must be literal; a two-word table cell or text with OCR errors does not verify.
+- Quotes must be literal; a two-word table cell does not verify, nor does a sentence the model repaired after recognition had mixed its lines with another column's.
 - Top-cause accuracy is a keyword match, a proxy that a judging model will later complement.
 - `KeywordPageSelector` is lexical: a report in another language than the manual, or in other words, can miss the right page. `HybridPageSelector` also matches by meaning, at the price of an embedding call per report, and still misses pages. Selected pages are not reranked.
 - An evaluation run ranks the pages a second time for the retrieval metrics; the embedding tokens of that second pass are not counted. The first triage after a new manual pays for embedding its pages, because `library sync` does not embed.
 - The Claude adapter does not use prompt caching yet, so its `cached_input_tokens` is zero in practice.
 - The unit of evidence is the page. Ranking by smaller pieces (`--chunk-size`, the `chunking` extra) is optional and off by default: on the one real manual it was tried on, it changed the retrieval metrics by no more than the noise between cases.
 - `FolderLibrary` is the only ready-made document source. It syncs on request, not on a schedule, and has no access control beyond the tenant and device folders.
-- PDFs need a text layer; scanned manuals are rejected, not recognized.
+- A PDF page without a text layer is left out unless an `OcrEngine` is given (`FolderLibrary(..., ocr=...)`, `library sync --ocr`, the `ocr` extra); a page with any text layer, however poor, is never recognised. Recognised text is weaker evidence. A misread character cannot be detected, because the model quotes what was recognised, so each such citation is marked `source="ocr"`. `RapidOcrEngine` reads two columns of running text column by column; table cells and nested layouts come back with their lines mixed, and quotes from them often fail. On the one manual tried, 176 pages turned into images, 46 % of the citations verified against 92 % on its text layer (nine cases, standard error 0.16), although the expected page was sent in every case; the column rule was shaped on that same manual, and no real scan has been tried.
 
 ## Roadmap
 
