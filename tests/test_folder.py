@@ -272,3 +272,18 @@ def test_registry_written_before_recognition_existed_still_opens(tmp_path: Path)
 
     assert document.pages[0].text == "E7: flow sensor fault."
     assert manuals.sync().unchanged == ("acme/pump-1/service",)
+
+
+def test_sync_notes_pages_whose_meaning_is_in_small_pictures(tmp_path: Path) -> None:
+    text = ["Heating is active. Defrost is running. A fault is present."] * 5
+    path = tmp_path / "manuals/acme/pump-1/controller.pdf"
+    path.parent.mkdir(parents=True)
+    write_pdf(path, [text, text, text], icons=[4, 5, 14])
+
+    report = library(tmp_path).sync()
+
+    (note,) = report.notes
+    assert note == (
+        "acme/pump-1/controller: many small pictures, such as icons, on pages 2, 3;"
+        " what the pictures show is not in the text"
+    )

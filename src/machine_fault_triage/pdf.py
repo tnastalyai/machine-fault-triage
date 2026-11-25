@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import pypdfium2
+import pypdfium2.raw
 
 from machine_fault_triage.errors import DocumentLoadError
 from machine_fault_triage.inputs import Document, Page
@@ -13,8 +14,9 @@ from machine_fault_triage.ports import OcrEngine, PageImage
 _BROKEN_WORD = "\ufffe"
 _HYPHENATED = re.compile(r"(?<=[^\W\d_])-\n(?=[^\W\d_])")
 _OCR_DPI = 200
+_SMALL_IMAGE = 0.12
 
-EXTRACTION_VERSION = 1
+EXTRACTION_VERSION = 2
 """Raised whenever ``load_pdf`` starts to return different text for the same file."""
 
 
@@ -30,6 +32,10 @@ def load_pdf(path: Path, *, document_id: str, title: str, ocr: OcrEngine | None 
     the page is rendered and its text recognised, and the page is marked with
     ``PageSource.OCR``. Pages that have a text layer are never recognised.
     Recognition is slow, about a second a page, and can misread characters.
+
+    ``Page.small_images`` counts the embedded pictures narrower and lower
+    than an eighth of the page, the size of an icon or a button. Pictures
+    drawn as vector shapes are not counted.
 
     Raises:
         DocumentLoadError: If the file cannot be read as a PDF, or if no page
@@ -61,12 +67,15 @@ def _page(pdf: pypdfium2.PdfDocument, index: int, ocr: OcrEngine | None) -> Page
     try:
         text = _text_layer(page)
         source = PageSource.TEXT_LAYER
+        small_images = _small_images(page)
         if not text and ocr is not None:
             text = _HYPHENATED.sub("", ocr.recognize(_image(page))).strip()
             source = PageSource.OCR
     finally:
         page.close()
-    return Page(number=index + 1, text=text, source=source) if text else None
+    if not text:
+        return None
+    return Page(number=index + 1, text=text, source=source, small_images=small_images)
 
 
 def _text_layer(page: pypdfium2.PdfPage) -> str:
@@ -77,6 +86,15 @@ def _text_layer(page: pypdfium2.PdfPage) -> str:
         text_page.close()
     lines = raw.replace("\r\n", "\n").replace("\r", "\n")
     return lines.replace(f"{_BROKEN_WORD}\n", "").replace(_BROKEN_WORD, "").strip()
+
+
+def _small_images(page: pypdfium2.PdfPage) -> int:
+    width, height = page.get_size()
+    count = 0
+    for image in page.get_objects(filter=[pypdfium2.raw.FPDF_PAGEOBJ_IMAGE], max_depth=4):
+        left, bottom, right, top = image.get_bounds()
+        count += right - left < _SMALL_IMAGE * width and top - bottom < _SMALL_IMAGE * height
+    return count
 
 
 def _image(page: pypdfium2.PdfPage) -> PageImage:

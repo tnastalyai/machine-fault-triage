@@ -4,22 +4,32 @@ from pathlib import Path
 from machine_fault_triage.testing import FakeOcrEngine
 
 
-def write_pdf(path: Path, pages: Sequence[Sequence[str]]) -> Path:
+def write_pdf(path: Path, pages: Sequence[Sequence[str]], *, icons: Sequence[int] = ()) -> Path:
     kids = " ".join(f"{3 + 2 * index} 0 R" for index in range(len(pages)))
     font = 3 + 2 * len(pages)
+    icon = font + 1
     objects = [
         "<< /Type /Catalog /Pages 2 0 R >>",
         f"<< /Type /Pages /Kids [{kids}] /Count {len(pages)} >>",
     ]
     for index, lines in enumerate(pages):
         shown = " ".join(f"({line}) Tj T*" for line in lines)
-        body = f"BT /F1 12 Tf 72 720 Td 14 TL {shown} ET"
+        drawn = " ".join(
+            f"q 24 0 0 24 {72 + 30 * place} 100 cm /Im1 Do Q"
+            for place in range(icons[index] if index < len(icons) else 0)
+        )
+        body = f"BT /F1 12 Tf 72 720 Td 14 TL {shown} ET {drawn}"
         objects.append(
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]"
-            f" /Contents {4 + 2 * index} 0 R /Resources << /Font << /F1 {font} 0 R >> >> >>"
+            f" /Contents {4 + 2 * index} 0 R /Resources << /Font << /F1 {font} 0 R >>"
+            f" /XObject << /Im1 {icon} 0 R >> >> >>"
         )
         objects.append(f"<< /Length {len(body)} >>\nstream\n{body}\nendstream")
     objects.append("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    objects.append(
+        "<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray"
+        " /BitsPerComponent 8 /Length 1 >>\nstream\n0\nendstream"
+    )
     content = "%PDF-1.4\n"
     offsets = []
     for number, body in enumerate(objects, start=1):

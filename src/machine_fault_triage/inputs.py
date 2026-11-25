@@ -55,6 +55,8 @@ class Page(_Input):
     number: int = Field(ge=1)
     text: str
     source: PageSource = PageSource.TEXT_LAYER
+    small_images: int = Field(default=0, ge=0)
+    """How many small pictures, such as icons, the page holds. Their meaning is not in ``text``."""
 
 
 class Document(_Input):

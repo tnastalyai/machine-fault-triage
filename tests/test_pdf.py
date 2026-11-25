@@ -101,3 +101,11 @@ def test_scan_on_which_nothing_is_recognised_is_rejected(tmp_path: Path) -> None
         load_pdf(
             path, document_id="manual-1", title="Service manual", ocr=FakeOcrEngine(["", " \n"])
         )
+
+
+def test_small_pictures_on_a_page_are_counted(tmp_path: Path) -> None:
+    path = write_pdf(tmp_path / "manual.pdf", [["Icons on the main screen"], ["E7"]], icons=[6])
+
+    document = load_pdf(path, document_id="manual-1", title="Service manual")
+
+    assert [page.small_images for page in document.pages] == [6, 0]

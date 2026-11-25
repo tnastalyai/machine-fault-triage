@@ -35,6 +35,7 @@ _SOURCE = "CREATE TABLE IF NOT EXISTS source (folder TEXT NOT NULL)"
 
 _LONG_PAGE = 6000
 _THIN_TEXT = 200
+_MANY_SMALL_IMAGES = 5
 
 type _Key = tuple[str, str, str]
 
@@ -203,6 +204,12 @@ def _limits(name: str, document: Document) -> list[str]:
     without_text = document.pages[-1].number - len(document.pages)
     if without_text:
         notes.append(f"{name}: {without_text} pages have no text and cannot be searched or quoted")
+    pictured = [str(p.number) for p in document.pages if p.small_images >= _MANY_SMALL_IMAGES]
+    if pictured:
+        notes.append(
+            f"{name}: many small pictures, such as icons, on pages {', '.join(pictured)};"
+            " what the pictures show is not in the text"
+        )
     longest = max(document.pages, key=lambda page: len(page.text))
     if len(longest.text) > _LONG_PAGE:
         notes.append(
