@@ -2,8 +2,9 @@
 
 from collections.abc import Sequence
 from datetime import date
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from machine_fault_triage.models import HistoryScope
 
@@ -17,6 +18,14 @@ class FaultReport(_Input):
 
     description: str = Field(min_length=1)
     language: str = Field(min_length=2)
+
+    @field_validator("description")
+    @classmethod
+    def _description_says_something(cls, description: str) -> str:
+        if not description.strip():
+            message = "a fault report must not be blank"
+            raise ValueError(message)
+        return description
 
 
 class Page(_Input):
@@ -34,6 +43,14 @@ class Document(_Input):
     pages: tuple[Page, ...]
     supersedes: tuple[str, ...] = ()
     """Ids of older editions that this document replaces."""
+
+    @model_validator(mode="after")
+    def _page_numbers_are_unique(self) -> Self:
+        numbers = [page.number for page in self.pages]
+        if len(numbers) != len(set(numbers)):
+            message = "a document cannot hold two pages with the same number"
+            raise ValueError(message)
+        return self
 
     def page(self, number: int) -> Page | None:
         """Return the page with the given number, if the document has one."""

@@ -1,13 +1,30 @@
+import hashlib
+
 import pytest
 
 from machine_fault_triage.errors import InvalidRequestError
-from machine_fault_triage.prompts import CURRENT_PROMPT_VERSION, instructions, prompt_digest
+from machine_fault_triage.prompts import (
+    CURRENT_PROMPT_VERSION,
+    RETRY_AFTER_INVALID,
+    RETRY_AFTER_TRUNCATED,
+    instructions,
+    prompt_digest,
+)
 
 RELEASED = {1: "223b241c6811", 2: "452d554afaff", 3: "ab2daaa28a01"}
 
 
 def test_text_of_a_released_prompt_version_never_changes() -> None:
     assert {version: prompt_digest(version) for version in RELEASED} == RELEASED
+
+
+def test_notes_added_when_an_answer_is_asked_for_again_do_not_change_unnoticed() -> None:
+    notes = (RETRY_AFTER_INVALID, RETRY_AFTER_TRUNCATED)
+
+    assert [hashlib.sha256(note.encode()).hexdigest()[:12] for note in notes] == [
+        "5ae9f84e0efc",
+        "af64557617fb",
+    ]
 
 
 def test_current_version_is_the_newest_and_the_default() -> None:

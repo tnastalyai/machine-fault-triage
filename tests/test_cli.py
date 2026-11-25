@@ -209,6 +209,32 @@ def test_report_path_that_cannot_be_created_is_a_usage_error(
     assert "cannot write a report" in capsys.readouterr().err
 
 
+def test_report_over_the_given_limit_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    arguments = ["--dataset", str(write_dataset(tmp_path / "tiny")), "--model", CORRECT]
+
+    exit_code = main(
+        ["eval", "run", *arguments, "--report-limit", "5", "--out", str(tmp_path / "r.json")]
+    )
+
+    assert exit_code == 2
+    assert "the fault report holds" in capsys.readouterr().err
+
+
+def test_evidence_over_the_given_limit_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    arguments = ["--dataset", str(write_dataset(tmp_path / "tiny")), "--model", CORRECT]
+
+    exit_code = main(
+        ["eval", "run", *arguments, "--evidence-limit", "10", "--out", str(tmp_path / "r.json")]
+    )
+
+    assert exit_code == 2
+    assert "more than the limit of 10" in capsys.readouterr().err
+
+
 def test_price_is_recorded_in_the_report(tmp_path: Path) -> None:
     out = tmp_path / "run.json"
     arguments = ["--dataset", str(write_dataset(tmp_path / "tiny")), "--model", CORRECT]

@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- An answer that breaks the schema or is cut off is asked for again, once by default (`run_triage(..., retries=N)`, `eval run --retries N`). The reason goes to the model as untrusted data next to one fixed sentence of instructions. `TriageResult.attempts` counts the model calls, `usage` totals them, and an evaluation summary says how many runs asked again. A refusal is final.
+- Bounds on what goes in and comes out of the model. A fault report must not be blank, a document cannot hold two pages with the same number, and `run_triage` refuses evidence in which two documents or two service records share an id. `report_limit` refuses a fault report longer than 20,000 characters unless the caller raises it (`eval run --report-limit N`). `evidence_limit` refuses a request too large for the model before it is paid for; an evaluation run checks every case up front. The answer schema caps every text and list, so a runaway answer is rejected.
+- `Generation.detail` and `TriageResult.failure`: a run that failed because the answer broke the schema names the fields that broke it, without the values, field names or types the model made up.
 - Token usage on every result: `TriageResult.usage` holds the tokens of the model call, also for a refused or truncated one, and `TriageResult.embedding_tokens` those that page selection spent. `Usage.cached_input_tokens` separates input read from the provider's prompt cache. Embedders and page selectors return the tokens they spent with their values (`Embeddings`, `Selection`). Evaluation reports total and price them with `--cached-price` and `--embedding-price`.
 
 - Evaluation harness: a TOML case format, metrics computed in code, repeated runs with a per-metric summary, and a paired comparison of two runs.

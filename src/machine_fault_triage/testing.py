@@ -28,11 +28,19 @@ class FakeModel:
     """
 
     def __init__(
-        self, replies: Iterable[BaseModel | GenerationStatus], *, usage: Usage | None = None
+        self,
+        replies: Iterable[BaseModel | GenerationStatus],
+        *,
+        usage: Usage | None = None,
+        invalid_detail: str | None = None,
     ) -> None:
-        """Script the replies returned by successive calls, and the usage each one reports."""
+        """Script the replies returned by successive calls, and the usage each one reports.
+
+        ``invalid_detail`` is the reason given with every invalid reply.
+        """
         self._replies = deque(replies)
         self._usage = usage
+        self._invalid_detail = invalid_detail
         self.requests: list[GenerationRequest] = []
 
     def generate[OutputT: BaseModel](
@@ -44,10 +52,11 @@ class FakeModel:
             message = "the fake model has no scripted reply left"
             raise FakeModelExhaustedError(message)
         reply = self._replies.popleft()
+        if not isinstance(reply, GenerationStatus | output_type):
+            reply = GenerationStatus.INVALID
         if isinstance(reply, GenerationStatus):
-            return Generation[OutputT](status=reply, usage=self._usage)
-        if not isinstance(reply, output_type):
-            return Generation[OutputT](status=GenerationStatus.INVALID, usage=self._usage)
+            detail = self._invalid_detail if reply is GenerationStatus.INVALID else None
+            return Generation[OutputT](status=reply, usage=self._usage, detail=detail)
         return Generation[OutputT](
             status=GenerationStatus.COMPLETED, output=reply, usage=self._usage
         )

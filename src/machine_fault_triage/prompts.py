@@ -82,6 +82,16 @@ or pressure. Write in the language of the fault report.
 
 _VERSIONS = {1: _VERSION_1, 2: _VERSION_2, 3: _VERSION_3}
 
+RETRY_AFTER_INVALID = """
+Your previous answer did not match the required schema and was rejected. The
+evidence block labelled "rejected answer" lists what was wrong with it. Answer
+again in the required schema.
+"""
+
+RETRY_AFTER_TRUNCATED = """
+Your previous answer was cut off before it ended. Answer again, more briefly.
+"""
+
 CURRENT_PROMPT_VERSION = 3
 
 

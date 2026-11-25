@@ -213,6 +213,57 @@ def test_older_prompt_version_is_run_and_recorded() -> None:
     assert (report.prompt_version, report.prompt_digest) == (1, prompt_digest(1))
 
 
-def test_fewer_than_one_repeat_is_rejected() -> None:
+def test_case_over_the_evidence_limit_stops_the_run_before_any_model_call() -> None:
+    model = FakeModel([correct_draft()])
+
+    with pytest.raises(InvalidRequestError, match="more than the limit of 50"):
+        run_eval(
+            dataset([unanswerable_case(), answerable_case()]),
+            model,
+            model_label="x",
+            evidence_limit=50,
+        )
+
+    assert model.requests == []
+
+
+def test_report_over_the_limit_stops_the_run_before_any_model_call() -> None:
+    model = FakeModel([correct_draft()])
+
+    with pytest.raises(InvalidRequestError, match="more than the limit of 5; shorten it"):
+        run_eval(
+            dataset([unanswerable_case(), answerable_case()]),
+            model,
+            model_label="x",
+            pages=KeywordPageSelector(1),
+            report_limit=5,
+        )
+
+    assert model.requests == []
+
+
+@pytest.mark.parametrize(("repeats", "retries"), [(0, 1), (1, -1)])
+def test_fewer_than_one_repeat_or_negative_retries_are_rejected(repeats: int, retries: int) -> None:
     with pytest.raises(InvalidRequestError):
-        run_eval(dataset([answerable_case()]), FakeModel([]), model_label="x", repeats=0)
+        run_eval(
+            dataset([answerable_case()]),
+            FakeModel([]),
+            model_label="x",
+            repeats=repeats,
+            retries=retries,
+        )
+
+
+def test_summary_counts_the_runs_that_asked_the_model_again() -> None:
+    replies = (GenerationStatus.TRUNCATED, correct_draft(), correct_draft(), correct_draft())
+
+    report = run_eval(
+        dataset([answerable_case()]), FakeModel(replies), model_label="x", repeats=3, retries=1
+    )
+    patient = run_eval(
+        dataset([answerable_case()]), FakeModel([correct_draft()]), model_label="x", retries=0
+    )
+
+    assert [run.result.attempts for run in report.runs()] == [2, 1, 1]
+    assert "1 of 3 runs asked the model again" in render_summary(report)
+    assert "asked the model again" not in render_summary(patient)

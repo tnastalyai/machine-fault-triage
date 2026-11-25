@@ -121,6 +121,9 @@ class TriageResult(_Model):
     ``usage`` holds the tokens of the model call, when the model reports
     them, also for a call that was refused or cut off. ``embedding_tokens``
     holds the tokens that page selection spent on embeddings for this run.
+    ``failure`` says why the model answer was rejected, when the run failed
+    because the answer did not match the schema. Treat it as untrusted text. ``attempts`` counts the
+    model calls of the run; it is above one when an answer was asked for again.
     """
 
     status: TriageStatus
@@ -137,6 +140,8 @@ class TriageResult(_Model):
     prompt_version: int | None = None
     usage: Usage | None = None
     embedding_tokens: int = Field(default=0, ge=0)
+    failure: str | None = None
+    attempts: int = Field(default=1, ge=1)
 
     @model_validator(mode="after")
     def _status_matches_content(self) -> Self:

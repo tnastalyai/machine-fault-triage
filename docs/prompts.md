@@ -9,6 +9,10 @@ The instructions sent to the model live in [`prompts.py`](../src/machine_fault_t
 
 The fingerprint covers the instructions only. The answer schema (`DraftTriage`) and the sentence an adapter adds about evidence tags also reach the model; a change to either is a change of behaviour that the fingerprint does not show.
 
+## Asking again
+
+When an answer breaks the schema or is cut off, `run_triage` asks once more and appends one fixed sentence to the instructions (`RETRY_AFTER_INVALID`, `RETRY_AFTER_TRUNCATED`). What was wrong with the answer is sent as an untrusted block, never inside the instructions, because the names of unexpected fields are chosen by the model. The fingerprint of a version does not cover these sentences; a test pins them separately.
+
 ## History
 
 ### 3

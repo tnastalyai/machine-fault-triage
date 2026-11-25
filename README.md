@@ -12,6 +12,7 @@ A technician usually learns what is wrong only after arriving on site, although 
 
 - **Grounded or flagged.** The model answers in a draft schema that has no `verified` field. The library checks every quote against the cited page, as whole words and at least three of them, and every service record against the supplied history. A cause without verified evidence drops to low confidence, and numbers in the answer that occur nowhere in the evidence are listed in `unsupported_figures` ([ADR 0001](docs/adr/0001-verify-citations-outside-the-model.md)).
 - **Abstention is a result.** `not_enough_data` with questions for the customer is a first-class outcome.
+- **Bounded and explained.** Inputs and the answer schema have size limits, an answer that breaks the schema is asked for again once, and a failed run names the fields that broke it.
 - **Untrusted input stays data.** Fault reports and document text reach the model only as `UntrustedBlock` values, apart from the instructions.
 - **Bring your own model and storage.** `StructuredModel`, `Embedder`, `DocumentProvider` and `HistoryProvider` are `typing.Protocol` interfaces. The core depends on no provider SDK.
 
@@ -133,7 +134,7 @@ print(result.embedding_tokens)
 0
 ```
 
-`usage` is `None` when the model adapter reports no tokens, as `FakeModel` does here. It is set for refused and truncated calls too, which are billed. `cached_input_tokens` is the part of the input that the provider read from its prompt cache. `embedding_tokens` counts the fault report and the pages embedded for the first time; pages in the vector cache cost nothing.
+`usage` is `None` when the model adapter reports no tokens, as `FakeModel` does here. It is set for refused and truncated calls too, which are billed, and totals every attempt when an answer was asked for again (`result.attempts`). `cached_input_tokens` is the part of the input that the provider read from its prompt cache. `embedding_tokens` counts the fault report and the pages embedded for the first time; pages in the vector cache cost nothing.
 
 ## Evaluation
 
@@ -152,6 +153,7 @@ uv run machine-fault-triage eval compare runs/baseline.json runs/sonnet.json
 ## Limitations
 
 - Verification proves that a quote exists on the page, not that it supports the cause.
+- `evidence_limit` and `report_limit` count characters, not tokens. The default of the first suits models with a large context window; set both for the models in use.
 - Checks, fixes and parts are free text. Only their numbers are compared with the evidence.
 - Quotes must be literal; a two-word table cell or text with OCR errors does not verify.
 - Top-cause accuracy is a keyword match, a proxy that a judging model will later complement.

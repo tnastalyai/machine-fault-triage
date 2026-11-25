@@ -4,10 +4,16 @@ from collections.abc import Sequence
 from enum import StrEnum
 from typing import NamedTuple, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from machine_fault_triage.inputs import Document, FaultReport, ServiceRecord
 from machine_fault_triage.models import Usage
+
+_LONGEST_REJECTION = 1000
+_FIXED_WORDING = {
+    "extra_forbidden": "holds a field the schema does not have",
+    "union_tag_invalid": "has a type the schema does not have",
+}
 
 
 class UntrustedBlock(BaseModel):
@@ -41,6 +47,9 @@ class Generation[OutputT: BaseModel](BaseModel):
     """Outcome of a model call: the parsed output, or the reason there is none.
 
     ``usage`` is optional so that a model that cannot report it still fits.
+    ``detail`` says why an answer was rejected as invalid: the fields that
+    broke the schema, without the values the model wrote. It is still derived
+    from a model answer and must be handled as untrusted text.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -48,6 +57,7 @@ class Generation[OutputT: BaseModel](BaseModel):
     status: GenerationStatus
     output: OutputT | None = None
     usage: Usage | None = None
+    detail: str | None = None
 
     @model_validator(mode="after")
     def _output_present_only_when_completed(self) -> "Generation[OutputT]":
@@ -55,6 +65,22 @@ class Generation[OutputT: BaseModel](BaseModel):
             message = "a generation carries output exactly when it completed"
             raise ValueError(message)
         return self
+
+
+def rejection(error: ValidationError) -> str:
+    """Describe why a model answer broke its schema, leaving out what the model wrote.
+
+    The name of an unexpected field and an unknown kind of citation are
+    chosen by the model, so they are replaced with fixed wording. The text is
+    still derived from a model answer: pass it on as data, not as instructions.
+    """
+    described = []
+    for problem in error.errors(include_input=False, include_url=False, include_context=False):
+        kind = problem["type"]
+        named = problem["loc"][:-1] if kind == "extra_forbidden" else problem["loc"]
+        where = ".".join(str(part) for part in named) or "answer"
+        described.append(f"{where}: {_FIXED_WORDING.get(kind, problem['msg'])}")
+    return "; ".join(described)[:_LONGEST_REJECTION]
 
 
 class StructuredModel(Protocol):

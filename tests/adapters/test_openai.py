@@ -163,6 +163,7 @@ def test_answer_without_usable_output_is_reported_through_the_status(
     assert generation.status is status
     assert generation.output is None
     assert generation.usage == Usage(input_tokens=100, output_tokens=5, cached_input_tokens=40)
+    assert (generation.detail is not None) == (status is GenerationStatus.INVALID)
 
 
 def test_missing_usage_is_reported_as_unknown() -> None:
@@ -178,6 +179,14 @@ def test_usage_without_a_cache_breakdown_counts_no_cached_tokens() -> None:
     usage = model_for(api).generate(REQUEST, DraftTriage).usage
 
     assert usage == Usage(input_tokens=100, output_tokens=5)
+
+
+def test_invalid_answer_names_the_fields_that_broke_the_schema() -> None:
+    generation = model_for(FakeApi(answer('{"summary": 7}'))).generate(REQUEST, DraftTriage)
+
+    assert generation.detail == (
+        "summary: Input should be a valid string; enough_evidence: Field required"
+    )
 
 
 def test_failed_api_call_is_raised_as_a_library_error() -> None:

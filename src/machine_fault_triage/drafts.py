@@ -2,9 +2,14 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from machine_fault_triage.models import Confidence
+
+_Name = Annotated[str, StringConstraints(max_length=300)]
+_Line = Annotated[str, StringConstraints(max_length=1000)]
+_Text = Annotated[str, StringConstraints(min_length=1, max_length=3000)]
+_Lines = Annotated[tuple[_Line, ...], Field(max_length=20)]
 
 
 class _Draft(BaseModel):
@@ -15,16 +20,16 @@ class DraftDocumentCitation(_Draft):
     """A quote the model claims to have read on a document page."""
 
     type: Literal["document"] = "document"
-    document_id: str
+    document_id: _Name
     page: int
-    quote: str
+    quote: Annotated[str, StringConstraints(max_length=3000)]
 
 
 class DraftHistoryCitation(_Draft):
     """A service record the model claims supports the cause."""
 
     type: Literal["history"] = "history"
-    record_id: str
+    record_id: _Name
 
 
 DraftCitation = Annotated[DraftDocumentCitation | DraftHistoryCitation, Field(discriminator="type")]
@@ -33,21 +38,25 @@ DraftCitation = Annotated[DraftDocumentCitation | DraftHistoryCitation, Field(di
 class DraftCause(_Draft):
     """A cause as proposed by the model."""
 
-    title: str = Field(min_length=1)
+    title: _Name = Field(min_length=1)
     confidence: Confidence
-    why: str = Field(min_length=1)
-    checks: tuple[str, ...] = ()
-    fix: str | None = None
-    citations: tuple[DraftCitation, ...] = ()
+    why: _Text
+    checks: _Lines = ()
+    fix: Annotated[str, StringConstraints(max_length=3000)] | None = None
+    citations: tuple[DraftCitation, ...] = Field(default=(), max_length=20)
 
 
 class DraftTriage(_Draft):
-    """The complete model answer for one fault report."""
+    """The complete model answer for one fault report.
 
-    summary: str
+    Every text and list has an upper bound, several times above what answers
+    need, so that a runaway answer is rejected instead of passed on.
+    """
+
+    summary: _Text
     enough_evidence: bool
-    causes: tuple[DraftCause, ...] = ()
-    parts_to_bring: tuple[str, ...] = ()
-    safety_warnings: tuple[str, ...] = ()
-    questions_for_customer: tuple[str, ...] = ()
-    missing: tuple[str, ...] = ()
+    causes: tuple[DraftCause, ...] = Field(default=(), max_length=10)
+    parts_to_bring: _Lines = ()
+    safety_warnings: _Lines = ()
+    questions_for_customer: _Lines = ()
+    missing: _Lines = ()

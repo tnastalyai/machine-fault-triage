@@ -3,6 +3,7 @@
 import time
 from collections.abc import Sequence
 from importlib.metadata import version
+from typing import NamedTuple
 
 from pydantic import BaseModel
 
@@ -17,7 +18,12 @@ from machine_fault_triage.inputs import (
     ServiceRecord,
     without_superseded,
 )
-from machine_fault_triage.pipeline import run_triage
+from machine_fault_triage.pipeline import (
+    check_evidence_size,
+    check_report_size,
+    evidence_request,
+    run_triage,
+)
 from machine_fault_triage.ports import (
     Generation,
     GenerationRequest,
@@ -26,7 +32,7 @@ from machine_fault_triage.ports import (
     Selection,
     StructuredModel,
 )
-from machine_fault_triage.prompts import CURRENT_PROMPT_VERSION, prompt_digest
+from machine_fault_triage.prompts import CURRENT_PROMPT_VERSION, instructions, prompt_digest
 
 _TENANT_ID = "evaluation"
 
@@ -41,6 +47,9 @@ def run_eval(  # noqa: PLR0913
     pages: PageSelector | None = None,
     page_selection: str | None = None,
     prompt_version: int = CURRENT_PROMPT_VERSION,
+    evidence_limit: int = 1_000_000,
+    report_limit: int = 20_000,
+    retries: int = 1,
 ) -> RunReport:
     """Run each case ``repeats`` times against the model and score every result.
 
@@ -54,13 +63,33 @@ def run_eval(  # noqa: PLR0913
 
     ``prompt_version`` runs an older version of the instructions.
 
+    ``evidence_limit`` caps the characters of evidence sent in one call.
+    Without ``pages`` every case is checked against it before the first
+    model call, so that a run does not stop halfway through a paid dataset.
+    ``report_limit`` caps the characters of a fault report and is checked for
+    every case up front as well.
+
+    ``retries`` is how often an invalid or truncated answer is asked for again.
+
     Raises:
-        InvalidRequestError: If ``repeats`` is less than one,
-            or if no prompt has the given version.
+        InvalidRequestError: If ``repeats`` is less than one, if ``retries``
+            is negative, if no prompt has the given version, or if a case
+            exceeds ``report_limit`` or ``evidence_limit``.
     """
-    if repeats < 1:
-        message = "repeats must be at least 1"
+    if repeats < 1 or retries < 0:
+        message = "repeats must be at least 1 and retries must not be negative"
         raise InvalidRequestError(message)
+    for case in dataset.cases:
+        check_report_size(case.report, report_limit)
+    if pages is None:
+        for case in dataset.cases:
+            documents = without_superseded(dataset.documents_for(case))
+            check_evidence_size(
+                evidence_request(
+                    instructions(prompt_version), case.report, documents, case.records
+                ),
+                evidence_limit,
+            )
     return RunReport(
         dataset=dataset.name,
         dataset_digest=dataset.digest,
@@ -76,7 +105,13 @@ def run_eval(  # noqa: PLR0913
                 case_id=case.id,
                 category=case.category,
                 repeats=tuple(
-                    _run_case(case, dataset, model, pages, prompt_version) for _ in range(repeats)
+                    _run_case(
+                        case,
+                        dataset,
+                        model,
+                        _Settings(pages, prompt_version, evidence_limit, report_limit, retries),
+                    )
+                    for _ in range(repeats)
                 ),
             )
             for case in dataset.cases
@@ -84,13 +119,18 @@ def run_eval(  # noqa: PLR0913
     )
 
 
+class _Settings(NamedTuple):
+    pages: PageSelector | None
+    prompt_version: int
+    evidence_limit: int
+    report_limit: int
+    retries: int
+
+
 def _run_case(
-    case: EvalCase,
-    dataset: Dataset,
-    model: StructuredModel,
-    pages: PageSelector | None,
-    prompt_version: int,
+    case: EvalCase, dataset: Dataset, model: StructuredModel, settings: _Settings
 ) -> RepeatOutcome:
+    pages = settings.pages
     recorder = _Recorder(model)
     started = time.perf_counter()
     documents = without_superseded(dataset.documents_for(case))
@@ -105,7 +145,10 @@ def _run_case(
         documents=evidence,
         history=evidence,
         pages=_Selected(selection),
-        prompt_version=prompt_version,
+        prompt_version=settings.prompt_version,
+        evidence_limit=settings.evidence_limit,
+        report_limit=settings.report_limit,
+        retries=settings.retries,
     )
     return RepeatOutcome(
         result=result,

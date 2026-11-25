@@ -23,6 +23,7 @@ from machine_fault_triage.ports import (
     GenerationRequest,
     GenerationStatus,
     UntrustedBlock,
+    rejection,
 )
 
 _EMBEDDING_BATCH = 32
@@ -99,8 +100,10 @@ class OpenAIModel:
             return Generation[OutputT](status=status, usage=usage)
         try:
             output = output_type.model_validate_json(response.output_text)
-        except ValidationError:
-            return Generation[OutputT](status=GenerationStatus.INVALID, usage=usage)
+        except ValidationError as error:
+            return Generation[OutputT](
+                status=GenerationStatus.INVALID, usage=usage, detail=rejection(error)
+            )
         return Generation[OutputT](status=GenerationStatus.COMPLETED, output=output, usage=usage)
 
 

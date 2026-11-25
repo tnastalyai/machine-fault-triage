@@ -14,6 +14,7 @@ from machine_fault_triage.ports import (
     GenerationRequest,
     GenerationStatus,
     UntrustedBlock,
+    rejection,
 )
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
@@ -73,8 +74,10 @@ class ClaudeModel:
         text = "".join(block.text for block in message.content if block.type == "text")
         try:
             output = output_type.model_validate_json(text)
-        except ValidationError:
-            return Generation[OutputT](status=GenerationStatus.INVALID, usage=usage)
+        except ValidationError as error:
+            return Generation[OutputT](
+                status=GenerationStatus.INVALID, usage=usage, detail=rejection(error)
+            )
         return Generation[OutputT](status=GenerationStatus.COMPLETED, output=output, usage=usage)
 
     def _output_config(self, output_type: type[BaseModel]) -> OutputConfigParam:

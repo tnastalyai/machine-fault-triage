@@ -11,9 +11,10 @@ from machine_fault_triage.inputs import (
     ServiceRecord,
     without_superseded,
 )
-from machine_fault_triage.models import EvidenceLevel, TriageResult, TriageStatus
+from machine_fault_triage.models import EvidenceLevel, TriageResult, TriageStatus, Usage
 from machine_fault_triage.ports import (
     DocumentProvider,
+    Generation,
     GenerationRequest,
     GenerationStatus,
     HistoryProvider,
@@ -21,12 +22,21 @@ from machine_fault_triage.ports import (
     StructuredModel,
     UntrustedBlock,
 )
-from machine_fault_triage.prompts import CURRENT_PROMPT_VERSION, instructions
+from machine_fault_triage.prompts import (
+    CURRENT_PROMPT_VERSION,
+    RETRY_AFTER_INVALID,
+    RETRY_AFTER_TRUNCATED,
+    instructions,
+)
 
 _STATUS_WITHOUT_OUTPUT = {
     GenerationStatus.REFUSED: (TriageStatus.REFUSED, "The model declined to answer."),
     GenerationStatus.TRUNCATED: (TriageStatus.FAILED, "The model answer was cut off."),
     GenerationStatus.INVALID: (TriageStatus.FAILED, "The model answer did not match the schema."),
+}
+_RETRY_NOTES = {
+    GenerationStatus.INVALID: RETRY_AFTER_INVALID,
+    GenerationStatus.TRUNCATED: RETRY_AFTER_TRUNCATED,
 }
 
 
@@ -40,6 +50,9 @@ def run_triage(  # noqa: PLR0913
     history: HistoryProvider,
     pages: PageSelector | None = None,
     prompt_version: int = CURRENT_PROMPT_VERSION,
+    evidence_limit: int = 1_000_000,
+    report_limit: int = 20_000,
+    retries: int = 1,
 ) -> TriageResult:
     """Produce a grounded hint for the technician from one fault report.
 
@@ -53,10 +66,30 @@ def run_triage(  # noqa: PLR0913
     them per tenant and device: those of the model call in ``usage`` and
     those of page selection in ``embedding_tokens``.
 
+    ``evidence_limit`` caps the characters of evidence sent in one call, so
+    that a request too large for the model is refused before it is paid for.
+    The default is about 250,000 tokens of English text.
+
+    ``report_limit`` caps the characters of the fault report; raise it for
+    reports that arrive as long emails. A page selector that matches by
+    meaning embeds the report whole, so an embedding model whose input is
+    shorter than the report rejects it.
+
+    An answer that breaks the schema or is cut off is asked for again, up to
+    ``retries`` times, with a note on what was wrong. A refusal is final.
+    Every attempt is billed, and ``usage`` totals them.
+
     Raises:
-        InvalidRequestError: If ``tenant_id`` or ``device_id`` is blank, or if
-            no prompt has the given version.
+        InvalidRequestError: If ``tenant_id`` or ``device_id`` is blank, if
+            no prompt has the given version, if ``retries`` is negative, if
+            two documents or two service records share an id, if the report
+            exceeds ``report_limit``, or if the evidence exceeds
+            ``evidence_limit``.
     """
+    check_report_size(report, report_limit)
+    if retries < 0:
+        message = "retries must not be negative"
+        raise InvalidRequestError(message)
     if not tenant_id.strip() or not device_id.strip():
         message = "tenant_id and device_id must not be blank"
         raise InvalidRequestError(message)
@@ -64,17 +97,25 @@ def run_triage(  # noqa: PLR0913
     device_documents = without_superseded(
         documents.documents_for(tenant_id=tenant_id, device_id=device_id)
     )
+    _check_unique("document", [document.id for document in device_documents])
     embedding_tokens = 0
     if pages is not None:
         selection = pages.select(report, device_documents)
         device_documents, embedding_tokens = selection.documents, selection.embedding_tokens
     records = history.records_for(tenant_id=tenant_id, device_id=device_id)
-    request = _request(prompt, report, device_documents, records)
-    generation = model.generate(request, DraftTriage)
-    spent = {"usage": generation.usage, "embedding_tokens": embedding_tokens}
+    _check_unique("service record", [record.id for record in records])
+    request = evidence_request(prompt, report, device_documents, records)
+    check_evidence_size(request, evidence_limit)
+    generation, usages = _generate(model, request, retries)
+    spent = {
+        "usage": _total(usages),
+        "embedding_tokens": embedding_tokens,
+        "attempts": len(usages),
+    }
     if generation.output is None:
         status, summary = _STATUS_WITHOUT_OUTPUT[generation.status]
-        return _without_causes(status, summary, report, prompt_version).model_copy(update=spent)
+        failed = _without_causes(status, summary, report, prompt_version)
+        return failed.model_copy(update={**spent, "failure": generation.detail})
     figures = unsupported_figures(
         _answer_texts(generation.output),
         (f"{block.label}\n{block.content}" for block in request.untrusted),
@@ -83,12 +124,84 @@ def run_triage(  # noqa: PLR0913
     return result.model_copy(update={"unsupported_figures": figures, **spent})
 
 
-def _request(
+def _generate(
+    model: StructuredModel, request: GenerationRequest, retries: int
+) -> tuple[Generation[DraftTriage], list[Usage | None]]:
+    generation = model.generate(request, DraftTriage)
+    usages = [generation.usage]
+    while generation.status in _RETRY_NOTES and len(usages) <= retries:
+        generation = model.generate(_again(request, generation), DraftTriage)
+        usages.append(generation.usage)
+    return generation, usages
+
+
+def _again(request: GenerationRequest, rejected: Generation[DraftTriage]) -> GenerationRequest:
+    reason = (
+        (UntrustedBlock(label="rejected answer", content=rejected.detail),)
+        if rejected.detail
+        else ()
+    )
+    return GenerationRequest(
+        instructions=request.instructions + _RETRY_NOTES[rejected.status],
+        untrusted=(*request.untrusted, *reason),
+    )
+
+
+def _total(usages: Sequence[Usage | None]) -> Usage | None:
+    reported = [usage for usage in usages if usage is not None]
+    if not reported:
+        return None
+    return Usage(
+        input_tokens=sum(usage.input_tokens for usage in reported),
+        output_tokens=sum(usage.output_tokens for usage in reported),
+        cached_input_tokens=sum(usage.cached_input_tokens for usage in reported),
+    )
+
+
+def _check_unique(kind: str, ids: Sequence[str]) -> None:
+    repeated = sorted({item for item in ids if ids.count(item) > 1})
+    if repeated:
+        message = f"two {kind}s share the id {repeated[0]!r}; a citation could not tell them apart"
+        raise InvalidRequestError(message)
+
+
+def check_report_size(report: FaultReport, limit: int) -> None:
+    """Refuse a fault report that is longer than ``limit`` characters.
+
+    Raises:
+        InvalidRequestError: If the report exceeds the limit.
+    """
+    size = len(report.description)
+    if size > limit:
+        message = (
+            f"the fault report holds {size} characters, more than the limit of {limit};"
+            " shorten it or raise the limit"
+        )
+        raise InvalidRequestError(message)
+
+
+def check_evidence_size(request: GenerationRequest, limit: int) -> None:
+    """Refuse a request whose evidence is longer than ``limit`` characters.
+
+    Raises:
+        InvalidRequestError: If the evidence exceeds the limit.
+    """
+    size = sum(len(block.label) + len(block.content) for block in request.untrusted)
+    if size > limit:
+        message = (
+            f"the evidence holds {size} characters, more than the limit of {limit};"
+            " select fewer pages or raise the limit"
+        )
+        raise InvalidRequestError(message)
+
+
+def evidence_request(
     prompt: str,
     report: FaultReport,
     documents: Sequence[Document],
     records: Sequence[ServiceRecord],
 ) -> GenerationRequest:
+    """Build the one model call of a triage run: instructions and untrusted evidence."""
     pages = tuple(
         UntrustedBlock(
             label=f"document id={document.id} title={document.title!r} page={page.number}",

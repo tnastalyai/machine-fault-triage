@@ -73,6 +73,24 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--label", help="model name recorded in the report")
     run.add_argument("--repeats", type=int, default=1, help="runs per case")
     run.add_argument(
+        "--evidence-limit",
+        type=int,
+        default=1_000_000,
+        help="most characters of evidence sent in one model call",
+    )
+    run.add_argument(
+        "--report-limit",
+        type=int,
+        default=20_000,
+        help="most characters of one fault report",
+    )
+    run.add_argument(
+        "--retries",
+        type=int,
+        default=1,
+        help="how often an invalid or truncated answer is asked for again",
+    )
+    run.add_argument(
         "--price",
         type=float,
         nargs=2,
@@ -163,6 +181,9 @@ def _run(arguments: argparse.Namespace) -> str:
         model,
         model_label=arguments.label or arguments.model,
         repeats=arguments.repeats,
+        retries=arguments.retries,
+        evidence_limit=arguments.evidence_limit,
+        report_limit=arguments.report_limit,
         pricing=_pricing(arguments),
         pages=pages,
         page_selection=None if pages is None else pages.description,

@@ -183,6 +183,9 @@ def render_summary(report: RunReport) -> str:
 def _resources(report: RunReport) -> str:
     runs = report.runs()
     parts = [f"median {statistics.median(run.seconds for run in runs):.1f} s per run"]
+    again = sum(run.result.attempts > 1 for run in runs)
+    if again:
+        parts.append(f"{again} of {len(runs)} runs asked the model again")
     usage = report.usage()
     if usage is not None:
         parts.append(f"{usage.input_tokens} input and {usage.output_tokens} output tokens")
