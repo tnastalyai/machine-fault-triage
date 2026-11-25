@@ -2,7 +2,12 @@ import pytest
 
 from machine_fault_triage import Confidence, DocumentCitation, EvidenceLevel, HistoryCitation
 from machine_fault_triage.drafts import DraftDocumentCitation
-from machine_fault_triage.grounding import evidence_level, ground
+from machine_fault_triage.grounding import (
+    contains_quote,
+    evidence_level,
+    ground,
+    unsupported_figures,
+)
 from tests.factories import (
     draft_cause,
     manual,
@@ -111,3 +116,46 @@ def test_evidence_level_is_history_when_only_a_service_record_is_verified() -> N
 
 def test_evidence_level_is_none_without_causes() -> None:
     assert evidence_level(()) is EvidenceLevel.NONE
+
+
+@pytest.mark.parametrize("quote", ["E7", "flow sensor", "sensor open"])
+def test_quote_shorter_than_three_words_proves_nothing(quote: str) -> None:
+    (cause,) = ground([draft_cause([manual_citation(quote=quote)])], [manual()], [])
+
+    assert not cause.citations[0].verified
+    assert cause.confidence is Confidence.LOW
+
+
+@pytest.mark.parametrize(
+    ("text", "quote"),
+    [
+        ("Set the pressure to 15 bar.", "5 bar"),
+        ("Resistance at 25 degrees: 10,000 ohm", "5 degrees: 10,000 ohm"),
+        ("Check the strainers yearly.", "check the strainer"),
+        ("Anything at all.", "   "),
+    ],
+)
+def test_quote_cut_out_of_the_middle_of_a_word_or_number_is_not_found(
+    text: str, quote: str
+) -> None:
+    assert not contains_quote(text, quote)
+
+
+@pytest.mark.parametrize("quote", ["15 bar", "(auto): flow switch", "pressure to 15 bar."])
+def test_quote_of_whole_words_is_found_whatever_its_punctuation(quote: str) -> None:
+    assert contains_quote("A12 (auto): flow switch open. Set the pressure to 15 bar.", quote)
+
+
+def test_numbers_missing_from_the_evidence_are_listed_once_in_order() -> None:
+    answer = ["Expect about 25.39 kOhm at 5 degrees.", "Tighten to 70 Nm, then 25,39 again."]
+    evidence = ["Tightening torque 70 Nm.", "At 5 degrees: 25,388 kOhm. Record job-0312."]
+
+    assert unsupported_figures(answer, evidence) == ("25.39",)
+
+
+def test_decimal_comma_and_point_name_the_same_number() -> None:
+    assert unsupported_figures(["Fill to 1,5 bar."], ["Fill pressure 1.5 bar"]) == ()
+
+
+def test_single_digits_are_not_checked() -> None:
+    assert unsupported_figures(["Check 3 things in step 2."], ["No numbers here."]) == ()

@@ -33,6 +33,12 @@ anthropic = [
 openai = [
     "openai>=3.59.0",
 ]
+pdf = [
+    "pypdfium2>=5.15.2",
+]
+chunking = [
+    "chonkie>=1.7.0",
+]
 
 [dependency-groups]
 dev = [
@@ -73,6 +79,10 @@ strict = true
 python_version = "3.12"
 files = ["src", "tests"]
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "pypdfium2.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

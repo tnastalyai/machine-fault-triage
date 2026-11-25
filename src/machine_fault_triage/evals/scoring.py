@@ -1,6 +1,8 @@
 """Metrics computed in code from one triage result, without a judging model."""
 
+import math
 import re
+from collections.abc import Sequence
 from enum import StrEnum
 
 from machine_fault_triage.drafts import DraftTriage
@@ -10,6 +12,7 @@ from machine_fault_triage.evals.cases import (
     ExpectedHistoryEvidence,
 )
 from machine_fault_triage.grounding import contains_quote
+from machine_fault_triage.inputs import Document
 from machine_fault_triage.models import Cause, DocumentCitation, TriageResult, TriageStatus
 
 
@@ -19,29 +22,85 @@ class Metric(StrEnum):
     ANSWERED_WHEN_ANSWERABLE = "answered_when_answerable"
     ABSTAINED_WHEN_REQUIRED = "abstained_when_required"
     TOP_CAUSE = "top_cause"
+    EXPECTED_PAGE_SENT = "expected_page_sent"
+    RETRIEVAL_RECALL = "retrieval_recall"
+    RETRIEVAL_PRECISION = "retrieval_precision"
+    RECIPROCAL_RANK = "reciprocal_rank"
+    RETRIEVAL_NDCG = "retrieval_ndcg"
     EXPECTED_EVIDENCE = "expected_evidence"
+    EVERY_PROBLEM_ANSWERED = "every_problem_answered"
+    UNCOVERED_LEFT_OPEN = "uncovered_left_open"
     CITATIONS_VERIFIED = "citations_verified"
     INJECTION_RESISTED = "injection_resisted"
     SAFETY_WARNING = "safety_warning"
 
 
-def score(case: EvalCase, draft: DraftTriage | None, result: TriageResult) -> dict[Metric, float]:
+def score(
+    case: EvalCase,
+    draft: DraftTriage | None,
+    result: TriageResult,
+    sent: Sequence[Document],
+    ranked: Sequence[tuple[str, int]] | None = None,
+) -> dict[Metric, float]:
     """Score one result against its case, leaving out metrics that do not apply.
 
     ``draft`` is the raw model answer. It is needed because citations of
     documents or records that were never supplied are dropped from the result,
-    and they still count against the share of verified citations.
+    and they still count against the share of verified citations. ``sent`` is
+    what the model was shown, after any page selection: the expected page sent
+    tells a page that was never sent apart from a page the model ignored.
+    ``ranked`` is the order in which a selector ranked the pages it kept. With
+    it, the retrieval is scored on its own: recall and precision of the kept
+    pages, the reciprocal rank of the first expected page, and NDCG.
     """
     scores = {
+        Metric.EXPECTED_PAGE_SENT: _expected_page_sent(case, sent),
+        **_retrieval(case, ranked),
         Metric.ANSWERED_WHEN_ANSWERABLE: _answered(case, result),
         Metric.ABSTAINED_WHEN_REQUIRED: _abstained(case, result),
         Metric.TOP_CAUSE: _top_cause(case, result),
         Metric.EXPECTED_EVIDENCE: _expected_evidence(case, result),
+        Metric.EVERY_PROBLEM_ANSWERED: _every_problem_answered(case, result),
+        Metric.UNCOVERED_LEFT_OPEN: _uncovered_left_open(case, result),
         Metric.CITATIONS_VERIFIED: _citations_verified(draft, result),
         Metric.INJECTION_RESISTED: _injection_resisted(case, result),
         Metric.SAFETY_WARNING: _safety_warning(case, result),
     }
     return {metric: value for metric, value in scores.items() if value is not None}
+
+
+def _expected_page_sent(case: EvalCase, sent: Sequence[Document]) -> float | None:
+    expected = [
+        evidence
+        for evidence in case.expect.all_evidence
+        if isinstance(evidence, ExpectedDocumentEvidence)
+    ]
+    if not expected:
+        return None
+    pages = {(document.id, page.number) for document in sent for page in document.pages}
+    return float(all((evidence.document_id, evidence.page) in pages for evidence in expected))
+
+
+def _retrieval(
+    case: EvalCase, ranked: Sequence[tuple[str, int]] | None
+) -> dict[Metric, float | None]:
+    expected = {
+        (evidence.document_id, evidence.page)
+        for evidence in case.expect.all_evidence
+        if isinstance(evidence, ExpectedDocumentEvidence)
+    }
+    if ranked is None or not expected:
+        return {}
+    hits = [page in expected for page in ranked]
+    first = next((position for position, hit in enumerate(hits, start=1) if hit), None)
+    gain = sum(hit / math.log2(position + 1) for position, hit in enumerate(hits, start=1))
+    ideal = sum(1 / math.log2(position + 1) for position in range(1, len(expected) + 1))
+    return {
+        Metric.RETRIEVAL_RECALL: sum(hits) / len(expected),
+        Metric.RETRIEVAL_PRECISION: sum(hits) / len(ranked) if ranked else 0.0,
+        Metric.RECIPROCAL_RANK: 1 / first if first else 0.0,
+        Metric.RETRIEVAL_NDCG: gain / ideal,
+    }
 
 
 def _answered(case: EvalCase, result: TriageResult) -> float | None:
@@ -57,14 +116,40 @@ def _abstained(case: EvalCase, result: TriageResult) -> float | None:
 
 
 def _top_cause(case: EvalCase, result: TriageResult) -> float | None:
-    if case.expect.status is not TriageStatus.OK:
+    if not case.expect.cause_terms:
         return None
     if not result.causes:
         return 0.0
-    text = _cause_text(result.causes[0])
+    return float(_names(result.causes[0], case.expect.cause_terms))
+
+
+def _names(cause: Cause, groups: Sequence[Sequence[str]]) -> bool:
+    text = _cause_text(cause)
+    return all(any(_mentions(text, term) for term in group) for group in groups)
+
+
+def _every_problem_answered(case: EvalCase, result: TriageResult) -> float | None:
+    if not case.expect.problems:
+        return None
     return float(
-        all(any(_mentions(text, term) for term in group) for group in case.expect.cause_terms)
+        all(
+            any(
+                _names(cause, problem.cause_terms)
+                and all(_is_cited(expected, cause) for expected in problem.evidence)
+                for cause in result.causes
+            )
+            for problem in case.expect.problems
+        )
     )
+
+
+def _uncovered_left_open(case: EvalCase, result: TriageResult) -> float | None:
+    terms = case.expect.not_covered
+    if not terms:
+        return None
+    guessed = any(_mentions(_cause_text(cause), term) for cause in result.causes for term in terms)
+    said = " ".join((result.summary, *result.missing, *result.questions_for_customer)).casefold()
+    return float(not guessed and any(_mentions(said, term) for term in terms))
 
 
 def _cause_text(cause: Cause) -> str:

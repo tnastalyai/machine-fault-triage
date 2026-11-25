@@ -102,8 +102,26 @@ class Cause(_Model):
         return self
 
 
+class Usage(_Model):
+    """Tokens billed for one model call, as reported by the provider.
+
+    ``input_tokens`` counts every input token. ``cached_input_tokens`` says
+    how many of them the provider read from its prompt cache, which it bills
+    at a lower price.
+    """
+
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    cached_input_tokens: int = Field(default=0, ge=0)
+
+
 class TriageResult(_Model):
-    """Structured hint for the technician produced by one triage run."""
+    """Structured hint for the technician produced by one triage run.
+
+    ``usage`` holds the tokens of the model call, when the model reports
+    them, also for a call that was refused or cut off. ``embedding_tokens``
+    holds the tokens that page selection spent on embeddings for this run.
+    """
 
     status: TriageStatus
     summary: str
@@ -115,6 +133,10 @@ class TriageResult(_Model):
     safety_warnings: tuple[str, ...] = ()
     questions_for_customer: tuple[str, ...] = ()
     missing: tuple[str, ...] = ()
+    unsupported_figures: tuple[str, ...] = ()
+    prompt_version: int | None = None
+    usage: Usage | None = None
+    embedding_tokens: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def _status_matches_content(self) -> Self:

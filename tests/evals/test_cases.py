@@ -73,6 +73,12 @@ def test_directory_without_cases_is_rejected(tmp_path: Path) -> None:
             "status": TriageStatus.NOT_ENOUGH_DATA,
             "evidence": (ExpectedHistoryEvidence(record_id="order-9"),),
         },
+        {
+            "status": TriageStatus.OK,
+            "cause_terms": (("flow",),),
+            "problems": ({"cause_terms": (("strainer",),)},),
+        },
+        {"status": TriageStatus.OK, "cause_terms": (("flow",),), "not_covered": ("rattle",)},
     ],
 )
 def test_expectation_that_cannot_be_scored_is_rejected(expectation: dict[str, object]) -> None:

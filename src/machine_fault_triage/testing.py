@@ -1,12 +1,18 @@
 """Test doubles for applications and adapters built on this library."""
 
 from collections import deque
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 
 from pydantic import BaseModel
 
 from machine_fault_triage.errors import TriageError
-from machine_fault_triage.ports import Generation, GenerationRequest, GenerationStatus, Usage
+from machine_fault_triage.models import Usage
+from machine_fault_triage.ports import (
+    Embeddings,
+    Generation,
+    GenerationRequest,
+    GenerationStatus,
+)
 
 
 class FakeModelExhaustedError(TriageError):
@@ -45,3 +51,43 @@ class FakeModel:
         return Generation[OutputT](
             status=GenerationStatus.COMPLETED, output=reply, usage=self._usage
         )
+
+
+class FakeEmbedder:
+    """A scripted embedder that never touches the network.
+
+    Vectors are looked up by a word the text contains, so a test can state
+    which texts mean the same. Texts that contain none of the words get a
+    vector that is similar to nothing. Calls are recorded.
+    """
+
+    def __init__(
+        self, meanings: Mapping[str, Sequence[float]], *, tokens_per_text: int = 0
+    ) -> None:
+        """Script the vector returned for every text that contains a given word.
+
+        ``tokens_per_text`` is what the embedder reports as billed for each text.
+        """
+        self._meanings = dict(meanings)
+        self._tokens_per_text = tokens_per_text
+        self._size = len(next(iter(self._meanings.values()), ()))
+        self.page_calls: list[list[str]] = []
+        self.queries: list[str] = []
+
+    def embed_pages(self, texts: Sequence[str]) -> Embeddings:
+        """Return the scripted vector of each page."""
+        self.page_calls.append(list(texts))
+        return Embeddings(
+            [self._vector(text) for text in texts], self._tokens_per_text * len(texts)
+        )
+
+    def embed_query(self, text: str) -> Embeddings:
+        """Return the scripted vector of a fault report."""
+        self.queries.append(text)
+        return Embeddings([self._vector(text)], self._tokens_per_text)
+
+    def _vector(self, text: str) -> Sequence[float]:
+        for word, vector in self._meanings.items():
+            if word in text:
+                return vector
+        return [0.0] * self._size

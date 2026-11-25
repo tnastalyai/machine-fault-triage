@@ -19,3 +19,7 @@ class IncomparableRunsError(TriageError):
 
 class ModelCallError(TriageError):
     """A model adapter could not get an answer from its provider."""
+
+
+class DocumentLoadError(TriageError):
+    """A document file could not be turned into pages of text."""

@@ -6,12 +6,28 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Token usage on every result: `TriageResult.usage` holds the tokens of the model call, also for a refused or truncated one, and `TriageResult.embedding_tokens` those that page selection spent. `Usage.cached_input_tokens` separates input read from the provider's prompt cache. Embedders and page selectors return the tokens they spent with their values (`Embeddings`, `Selection`). Evaluation reports total and price them with `--cached-price` and `--embedding-price`.
+
 - Evaluation harness: a TOML case format, metrics computed in code, repeated runs with a per-metric summary, and a paired comparison of two runs.
 - `machine-fault-triage eval run` and `eval compare` commands.
 - `Usage` on `Generation`: adapters report the tokens of each call, and an evaluation report totals them, times every run and prices them with `--price`.
-- A seed dataset with two fictional devices and fifteen cases, including prompt-injection attempts.
+- A seed dataset with two fictional devices and eighteen cases, including prompt-injection attempts and reports that describe two problems at once.
+- `every_problem_answered` and `uncovered_left_open` metrics: a case can list several problems, each needing a cause of its own, and name a reported problem that the evidence does not cover and that must be left open instead of guessed.
+- Fault codes are matched however they are typed: `A11`, `a11` and `A-11` find a page that prints `A.11`.
 - `machine_fault_triage.adapters.claude.ClaudeModel`, installed with the `anthropic` extra.
 - `machine_fault_triage.adapters.openai.OpenAIModel`, installed with the `openai` extra.
+- Versioned prompt ([docs/prompts.md](docs/prompts.md)): every version of the instructions is kept, immutable, with a fingerprint pinned by a test. `run_triage(..., prompt_version=N)` and `eval run --prompt N` run an older version. Evaluation reports record the version and fingerprint, and a comparison says when two runs used different prompts or sent different pages. Version 3 defines the confidence levels and says when to abstain.
+- `machine_fault_triage.pdf.load_pdf`, installed with the `pdf` extra: reads the text layer of a PDF into a `Document` and rejoins words broken across lines.
+- `PageSelector` port and `KeywordPageSelector`: `run_triage(..., pages=...)` and `eval run --pages N` send only the pages that best match the report, and verify quotes against those pages only.
+- `Embedder` port, `HybridPageSelector`, `CachedEmbedder` and `machine_fault_triage.adapters.openai.OpenAIEmbedder`: pages are also matched by meaning, so a report in other words or another language than the manual can find its page. Page vectors are kept in a local SQLite file; fault reports are never stored. `eval run` takes `--embedder`, `--embedder-option`, `--embedding-cache` and `--neighbours`, and the report records how pages were selected.
+- `Document.supersedes`: an older edition is left out when its replacement is supplied too, so an outdated value cannot be quoted and verified.
+- `machine_fault_triage.folder.FolderLibrary` and `machine-fault-triage library sync`: PDF manuals kept as `TENANT/DEVICE/NAME.pdf` are read into a local registry. A sync reads only new and changed files, drops removed ones, reports files it could not read and why, notes what may limit the answers from a file (pages without text, very long pages, a thin text layer), and can delete the stored vectors of pages that no manual holds any more.
+- Retrieval metrics in evaluation reports, computed from the order in which a selector ranked the pages it kept: `retrieval_recall`, `retrieval_precision`, `reciprocal_rank` and `retrieval_ndcg`. Selectors expose that order through `rank`.
+- `TextSplitter` port and `machine_fault_triage.adapters.chonkie.ChonkieSplitter`, installed with the `chunking` extra: pages can be ranked by their pieces, recursive or fixed with overlap, while whole pages are still sent and cited. `eval run` takes `--chunk-size` and `--chunk-overlap`. Off by default.
+- `machine_fault_triage.testing.FakeEmbedder`, a scripted embedder for tests.
+- Stricter citation verification: a quote must be at least three words long and match whole words, so a fragment cut out of a longer number no longer verifies.
+- `TriageResult.unsupported_figures`: numbers in the answer that occur nowhere in what the model was shown. `TriageResult.prompt_version` records the prompt behind each answer.
+- `expected_page_sent` metric: tells a page that page selection never sent apart from a page the model ignored.
 - `run_triage`: a baseline run that puts all supplied evidence into one model call and verifies the answer.
 - Citation verification: document quotes are checked against the cited page, history citations against the supplied records. Unsupported causes are reduced to low confidence.
 - Ports for plugging in a model, a document source and service history: `StructuredModel`, `DocumentProvider`, `HistoryProvider`.

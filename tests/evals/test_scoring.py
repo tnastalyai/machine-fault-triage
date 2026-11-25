@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from machine_fault_triage import (
     Cause,
     Confidence,
@@ -9,12 +11,13 @@ from machine_fault_triage import (
     TriageResult,
     TriageStatus,
 )
-from machine_fault_triage.drafts import DraftTriage
+from machine_fault_triage.drafts import DraftCause, DraftTriage
 from machine_fault_triage.evals import (
     EvalCase,
     Expectation,
     ExpectedDocumentEvidence,
     ExpectedHistoryEvidence,
+    ExpectedProblem,
     Metric,
     score,
 )
@@ -47,17 +50,19 @@ def result_of(draft: DraftTriage) -> TriageResult:
         language="en",
         causes=causes,
         safety_warnings=draft.safety_warnings,
+        missing=draft.missing,
     )
 
 
 def scores_for(case: EvalCase, draft: DraftTriage) -> dict[Metric, float]:
-    return score(case, draft, result_of(draft))
+    return score(case, draft, result_of(draft), [manual()])
 
 
 def test_correct_grounded_answer_scores_one_on_every_applicable_metric() -> None:
     scores = scores_for(answerable_case(), draft_triage([draft_cause([manual_citation()])]))
 
     assert scores == {
+        Metric.EXPECTED_PAGE_SENT: 1,
         Metric.ANSWERED_WHEN_ANSWERABLE: 1,
         Metric.TOP_CAUSE: 1,
         Metric.EXPECTED_EVIDENCE: 1,
@@ -69,6 +74,7 @@ def test_abstaining_on_an_answerable_case_fails_the_answer_metrics() -> None:
     scores = scores_for(answerable_case(), abstaining_draft())
 
     assert scores == {
+        Metric.EXPECTED_PAGE_SENT: 1,
         Metric.ANSWERED_WHEN_ANSWERABLE: 0,
         Metric.TOP_CAUSE: 0,
         Metric.EXPECTED_EVIDENCE: 0,
@@ -159,7 +165,7 @@ def test_another_service_record_is_not_the_expected_one() -> None:
         ),
     )
 
-    assert score(case, None, result)[Metric.EXPECTED_EVIDENCE] == 0
+    assert score(case, None, result, [manual()])[Metric.EXPECTED_EVIDENCE] == 0
 
 
 def test_citation_of_an_unsupplied_record_counts_against_verified_citations() -> None:
@@ -172,7 +178,9 @@ def test_verified_citations_are_not_scored_without_a_model_answer_or_citations()
     uncited = draft_triage([draft_cause()])
 
     assert Metric.CITATIONS_VERIFIED not in scores_for(answerable_case(), uncited)
-    assert Metric.CITATIONS_VERIFIED not in score(answerable_case(), None, result_of(uncited))
+    assert Metric.CITATIONS_VERIFIED not in score(
+        answerable_case(), None, result_of(uncited), [manual()]
+    )
 
 
 def test_forbidden_text_anywhere_in_the_result_means_the_injection_worked() -> None:
@@ -210,3 +218,108 @@ def test_expectation_defaults_score_nothing_extra() -> None:
     scores = scores_for(case, draft_triage([draft_cause()]))
 
     assert scores == {Metric.ANSWERED_WHEN_ANSWERABLE: 1, Metric.TOP_CAUSE: 1}
+
+
+def test_expected_page_that_was_not_sent_is_told_apart_from_one_the_model_ignored() -> None:
+    draft = draft_triage([draft_cause([manual_citation()])])
+    without_the_page = manual().model_copy(update={"pages": manual().pages[:1]})
+
+    scores = score(answerable_case(), draft, result_of(draft), [without_the_page])
+
+    assert scores[Metric.EXPECTED_PAGE_SENT] == 0
+    assert Metric.EXPECTED_PAGE_SENT not in scores_for(unanswerable_case(), abstaining_draft())
+
+
+def two_problem_case(**expectation: object) -> EvalCase:
+    expect = {
+        "status": TriageStatus.OK,
+        "problems": (
+            ExpectedProblem(
+                cause_terms=(("flow sensor",),),
+                evidence=(ExpectedDocumentEvidence(document_id="manual-1", page=77, anchor="E7"),),
+            ),
+            ExpectedProblem(cause_terms=(("strainer",),)),
+        ),
+        **expectation,
+    }
+    return EvalCase(
+        id="two",
+        category="two_problems",
+        report=fault_report(),
+        documents=("manual-1",),
+        expect=Expectation.model_validate(expect),
+    )
+
+
+def strainer_cause() -> DraftCause:
+    return draft_cause().model_copy(update={"title": "Blocked strainer"})
+
+
+def test_every_problem_needs_a_cause_of_its_own_in_any_position() -> None:
+    both = draft_triage([strainer_cause(), draft_cause([manual_citation()])])
+    one = draft_triage([draft_cause([manual_citation()])])
+
+    assert scores_for(two_problem_case(), both)[Metric.EVERY_PROBLEM_ANSWERED] == 1
+    assert scores_for(two_problem_case(), one)[Metric.EVERY_PROBLEM_ANSWERED] == 0
+    assert Metric.TOP_CAUSE not in scores_for(two_problem_case(), both)
+    assert scores_for(two_problem_case(), both)[Metric.EXPECTED_PAGE_SENT] == 1
+
+
+def test_problem_is_not_answered_by_a_cause_without_its_evidence() -> None:
+    uncited = draft_triage([strainer_cause(), draft_cause()])
+
+    assert scores_for(two_problem_case(), uncited)[Metric.EVERY_PROBLEM_ANSWERED] == 0
+
+
+def test_problem_the_evidence_does_not_cover_must_be_named_and_not_guessed() -> None:
+    case = two_problem_case(not_covered=("rattle",))
+    answered = [strainer_cause(), draft_cause([manual_citation()])]
+    open_question = draft_triage(answered).model_copy(
+        update={"missing": ("Nothing in the manual about the rattle.",)}
+    )
+    silent = draft_triage(answered)
+    guessed = draft_triage(
+        [*answered, draft_cause().model_copy(update={"title": "Loose panel rattles"})]
+    ).model_copy(update={"missing": ("The rattle is unexplained.",)})
+
+    assert scores_for(case, open_question)[Metric.UNCOVERED_LEFT_OPEN] == 1
+    assert scores_for(case, silent)[Metric.UNCOVERED_LEFT_OPEN] == 0
+    assert scores_for(case, guessed)[Metric.UNCOVERED_LEFT_OPEN] == 0
+    assert Metric.UNCOVERED_LEFT_OPEN not in scores_for(two_problem_case(), silent)
+
+
+def retrieval_scores(case: EvalCase, ranked: list[tuple[str, int]]) -> dict[Metric, float]:
+    draft = abstaining_draft()
+    return score(case, draft, result_of(draft), [manual()], ranked)
+
+
+def test_retrieval_is_scored_from_the_ranking_of_the_kept_pages() -> None:
+    scores = retrieval_scores(answerable_case(), [("manual-1", 76), ("manual-1", 77)])
+
+    assert scores[Metric.RETRIEVAL_RECALL] == 1
+    assert scores[Metric.RETRIEVAL_PRECISION] == 0.5
+    assert scores[Metric.RECIPROCAL_RANK] == 0.5
+    assert scores[Metric.RETRIEVAL_NDCG] == pytest.approx(0.6309, abs=1e-4)
+
+
+def test_expected_page_ranked_first_scores_one_on_rank_metrics() -> None:
+    scores = retrieval_scores(answerable_case(), [("manual-1", 77), ("manual-1", 76)])
+
+    assert scores[Metric.RECIPROCAL_RANK] == 1
+    assert scores[Metric.RETRIEVAL_NDCG] == 1
+
+
+def test_ranking_without_the_expected_page_scores_zero() -> None:
+    missed = retrieval_scores(answerable_case(), [("manual-1", 76)])
+    empty = retrieval_scores(answerable_case(), [])
+
+    assert missed[Metric.RETRIEVAL_RECALL] == missed[Metric.RECIPROCAL_RANK] == 0
+    assert empty[Metric.RETRIEVAL_PRECISION] == empty[Metric.RETRIEVAL_NDCG] == 0
+
+
+def test_retrieval_metrics_need_a_ranking_and_an_expected_page() -> None:
+    scores = retrieval_scores(two_problem_case(), [("manual-1", 77)])
+
+    assert scores[Metric.RETRIEVAL_RECALL] == 1
+    assert Metric.RETRIEVAL_RECALL not in retrieval_scores(unanswerable_case(), [("manual-1", 77)])
+    assert Metric.RETRIEVAL_RECALL not in scores_for(answerable_case(), abstaining_draft())

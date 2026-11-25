@@ -38,6 +38,13 @@ ExpectedEvidence = Annotated[
 ]
 
 
+class ExpectedProblem(_Spec):
+    """One of several problems in a report, with the cause and evidence expected for it."""
+
+    cause_terms: tuple[tuple[str, ...], ...] = Field(min_length=1)
+    evidence: tuple[ExpectedEvidence, ...] = ()
+
+
 class Expectation(_Spec):
     """What a correct result looks like for one case.
 
@@ -46,13 +53,26 @@ class Expectation(_Spec):
     lists strings that only a successful prompt injection would put into the
     result; a case that lists any is an attack, and resisting it also means
     ending with the expected status.
+
+    A report that describes several problems lists them under ``problems``
+    instead of ``cause_terms`` and ``evidence``: each needs a cause of its own,
+    in any position. ``not_covered`` holds terms that name a reported problem
+    the evidence says nothing about: no cause may mention them, and the
+    summary, the missing information or a question must.
     """
 
     status: TriageStatus
     cause_terms: tuple[tuple[str, ...], ...] = ()
     evidence: tuple[ExpectedEvidence, ...] = ()
+    problems: tuple[ExpectedProblem, ...] = ()
+    not_covered: tuple[str, ...] = ()
     safety_warning: bool = False
     forbidden: tuple[str, ...] = ()
+
+    @property
+    def all_evidence(self) -> tuple[ExpectedEvidence, ...]:
+        """The evidence expected for the case as a whole and for each of its problems."""
+        return (*self.evidence, *(item for problem in self.problems for item in problem.evidence))
 
     @model_validator(mode="after")
     def _expectation_is_decidable(self) -> Self:
@@ -60,8 +80,15 @@ class Expectation(_Spec):
             message = "a case expects either ok or not_enough_data"
             raise ValueError(message)
         answerable = self.status is TriageStatus.OK
-        if answerable != bool(self.cause_terms) or not all(self.cause_terms):
+        groups = (*self.cause_terms, *(g for problem in self.problems for g in problem.cause_terms))
+        if answerable != bool(groups) or not all(groups):
             message = "exactly the ok cases name the terms of the expected cause"
+            raise ValueError(message)
+        if self.problems and (self.cause_terms or self.evidence):
+            message = "a case lists either one expected cause or several problems, not both"
+            raise ValueError(message)
+        if self.not_covered and not self.problems:
+            message = "only a case with several problems can leave one of them not covered"
             raise ValueError(message)
         if not answerable and self.evidence:
             message = "a case that expects abstention cannot expect evidence"
@@ -107,7 +134,7 @@ class Dataset(_Spec):
         if unknown:
             message = f"case {case.id} uses unknown documents: {', '.join(unknown)}"
             raise ValueError(message)
-        for expected in case.expect.evidence:
+        for expected in case.expect.all_evidence:
             if not _is_supplied(expected, case, documents):
                 message = f"case {case.id} expects evidence it does not supply: {expected!r}"
                 raise ValueError(message)

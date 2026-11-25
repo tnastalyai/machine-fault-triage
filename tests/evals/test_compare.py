@@ -41,6 +41,31 @@ def test_comparison_pairs_cases_and_names_the_ones_that_moved() -> None:
     assert "baseline old  candidate new" in rendered
     assert "improved  answered_when_answerable: b" in rendered
     assert "regressed answered_when_answerable: a" in rendered
+    assert "different prompts" not in rendered
+
+
+def test_comparison_says_when_the_runs_used_different_prompts() -> None:
+    current = run_eval(dataset(CASES[:1]), FakeModel([correct_draft()]), model_label="new")
+    older = current.model_copy(update={"prompt_version": None, "prompt_digest": None})
+
+    rendered = render_comparison(compare_runs(older, current))
+
+    assert f"the runs used different prompts: unknown and {current.prompt_digest}" in rendered
+
+
+def test_comparison_says_when_the_runs_selected_pages_differently() -> None:
+    limited = run_eval(
+        dataset(CASES[:1]),
+        FakeModel([correct_draft()]),
+        model_label="new",
+        page_selection="keyword, at most 5 pages",
+    )
+    full = limited.model_copy(update={"page_selection": None})
+
+    rendered = render_comparison(compare_runs(full, limited))
+
+    assert "the runs selected pages differently: all and keyword, at most 5 pages" in rendered
+    assert "differently" not in render_comparison(compare_runs(limited, limited))
 
 
 def test_runs_over_different_datasets_are_not_compared() -> None:

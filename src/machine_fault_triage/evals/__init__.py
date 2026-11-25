@@ -7,6 +7,7 @@ from machine_fault_triage.evals.cases import (
     ExpectedDocumentEvidence,
     ExpectedEvidence,
     ExpectedHistoryEvidence,
+    ExpectedProblem,
     load_dataset,
 )
 from machine_fault_triage.evals.compare import Comparison, MetricDelta, compare_runs
@@ -30,6 +31,7 @@ __all__ = [
     "ExpectedDocumentEvidence",
     "ExpectedEvidence",
     "ExpectedHistoryEvidence",
+    "ExpectedProblem",
     "Metric",
     "MetricDelta",
     "MetricSummary",

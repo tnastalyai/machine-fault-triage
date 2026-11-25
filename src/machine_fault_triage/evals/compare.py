@@ -36,6 +36,10 @@ class Comparison(_Record):
 
     baseline_model: str
     candidate_model: str
+    baseline_prompt: str | None = None
+    candidate_prompt: str | None = None
+    baseline_pages: str | None = None
+    candidate_pages: str | None = None
     deltas: tuple[MetricDelta, ...]
 
 
@@ -60,7 +64,13 @@ def compare_runs(baseline: RunReport, candidate: RunReport) -> Comparison:
         if pairs:
             deltas.append(_delta(metric, pairs))
     return Comparison(
-        baseline_model=baseline.model, candidate_model=candidate.model, deltas=tuple(deltas)
+        baseline_model=baseline.model,
+        candidate_model=candidate.model,
+        baseline_prompt=baseline.prompt_digest,
+        candidate_prompt=candidate.prompt_digest,
+        baseline_pages=baseline.page_selection,
+        candidate_pages=candidate.page_selection,
+        deltas=tuple(deltas),
     )
 
 
@@ -89,6 +99,16 @@ def render_comparison(comparison: Comparison) -> str:
         f"{delta.difference:>+8.2f}{format_error(delta.standard_error):>8}"
         for delta in comparison.deltas
     )
+    if comparison.baseline_prompt != comparison.candidate_prompt:
+        lines.append(
+            f"the runs used different prompts: {comparison.baseline_prompt or 'unknown'}"
+            f" and {comparison.candidate_prompt or 'unknown'}"
+        )
+    if comparison.baseline_pages != comparison.candidate_pages:
+        lines.append(
+            f"the runs selected pages differently: {comparison.baseline_pages or 'all'}"
+            f" and {comparison.candidate_pages or 'all'}"
+        )
     for delta in comparison.deltas:
         lines.extend(f"improved  {delta.metric.value}: {case_id}" for case_id in delta.improved)
         lines.extend(f"regressed {delta.metric.value}: {case_id}" for case_id in delta.regressed)

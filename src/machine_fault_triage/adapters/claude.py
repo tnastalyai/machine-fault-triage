@@ -8,12 +8,12 @@ from pydantic import BaseModel, ValidationError
 
 from machine_fault_triage.adapters._evidence import OPENING, new_boundary, with_boundary_rule, wrap
 from machine_fault_triage.errors import ModelCallError
+from machine_fault_triage.models import Usage
 from machine_fault_triage.ports import (
     Generation,
     GenerationRequest,
     GenerationStatus,
     UntrustedBlock,
-    Usage,
 )
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
@@ -87,8 +87,13 @@ class ClaudeModel:
 
 
 def _usage(usage: anthropic.types.Usage) -> Usage:
-    cached = (usage.cache_creation_input_tokens or 0) + (usage.cache_read_input_tokens or 0)
-    return Usage(input_tokens=usage.input_tokens + cached, output_tokens=usage.output_tokens)
+    written = usage.cache_creation_input_tokens or 0
+    read = usage.cache_read_input_tokens or 0
+    return Usage(
+        input_tokens=usage.input_tokens + written + read,
+        output_tokens=usage.output_tokens,
+        cached_input_tokens=read,
+    )
 
 
 def _evidence(blocks: tuple[UntrustedBlock, ...], boundary: str) -> list[TextBlockParam]:

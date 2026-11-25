@@ -2,11 +2,12 @@
 
 from collections.abc import Sequence
 from enum import StrEnum
-from typing import Protocol
+from typing import NamedTuple, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from machine_fault_triage.inputs import Document, ServiceRecord
+from machine_fault_triage.inputs import Document, FaultReport, ServiceRecord
+from machine_fault_triage.models import Usage
 
 
 class UntrustedBlock(BaseModel):
@@ -34,15 +35,6 @@ class GenerationStatus(StrEnum):
     REFUSED = "refused"
     TRUNCATED = "truncated"
     INVALID = "invalid"
-
-
-class Usage(BaseModel):
-    """Tokens billed for one model call, as reported by the provider."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    input_tokens: int = Field(ge=0)
-    output_tokens: int = Field(ge=0)
 
 
 class Generation[OutputT: BaseModel](BaseModel):
@@ -84,6 +76,62 @@ class DocumentProvider(Protocol):
 
     def documents_for(self, *, tenant_id: str, device_id: str) -> Sequence[Document]:
         """Return the documents of the device and of its model, within one tenant."""
+        ...
+
+
+class Selection(NamedTuple):
+    """The pages chosen for one report, and the tokens spent on choosing them."""
+
+    documents: Sequence[Document]
+    embedding_tokens: int = 0
+
+
+class PageSelector(Protocol):
+    """Chooser of the document pages worth sending to the model for one report."""
+
+    def select(self, report: FaultReport, documents: Sequence[Document]) -> Selection:
+        """Return the documents cut down to the pages relevant to the report."""
+        ...
+
+
+class Embeddings(NamedTuple):
+    """Vectors of some texts, with the tokens billed for them when the provider says."""
+
+    vectors: Sequence[Sequence[float]]
+    tokens: int = 0
+
+
+class Embedder(Protocol):
+    """Model that turns text into vectors, so that texts can be compared by meaning."""
+
+    def embed_pages(self, texts: Sequence[str]) -> Embeddings:
+        """Return one vector per document page, in the order given."""
+        ...
+
+    def embed_query(self, text: str) -> Embeddings:
+        """Return the one vector of a fault report that pages are searched with."""
+        ...
+
+
+class TextSplitter(Protocol):
+    """Cuts the text of a page into smaller pieces that pages are ranked by."""
+
+    @property
+    def description(self) -> str:
+        """A short name of the splitting for evaluation reports."""
+        ...
+
+    def split(self, text: str) -> Sequence[str]:
+        """Return the pieces of ``text``, in order."""
+        ...
+
+
+@runtime_checkable
+class PageRanker(Protocol):
+    """A page selector that can also say in which order it ranked the pages it keeps."""
+
+    def rank(self, report: FaultReport, documents: Sequence[Document]) -> Sequence[tuple[str, int]]:
+        """Return the kept pages as ``(document id, page number)``, best first."""
         ...
 
 

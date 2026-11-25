@@ -1,6 +1,7 @@
 """Turns model claims into causes whose citations were checked against the evidence."""
 
-from collections.abc import Sequence
+import re
+from collections.abc import Iterable, Sequence
 
 from machine_fault_triage.drafts import DraftCause, DraftCitation, DraftDocumentCitation
 from machine_fault_triage.inputs import Document, ServiceRecord
@@ -13,6 +14,9 @@ from machine_fault_triage.models import (
     HistoryCitation,
 )
 
+_SHORTEST_QUOTE = 3
+_FIGURE = re.compile(r"(?<![\w.,])\d+(?:[.,]\d+)?(?![.,]?\d)(?!\w)")
+
 
 def ground(
     drafts: Sequence[DraftCause],
@@ -21,10 +25,11 @@ def ground(
 ) -> tuple[Cause, ...]:
     """Build causes from model drafts, keeping only what the evidence supports.
 
-    A document citation is verified when its quote occurs on the cited page. A
-    history citation is verified when the record was part of the supplied
-    evidence. Citations that point at unknown documents or records are dropped,
-    and a cause left without a verified citation is reduced to low confidence.
+    A document citation is verified when its quote is at least three words
+    long and occurs on the cited page as whole words. A history citation is
+    verified when the record was part of the supplied evidence. Citations that
+    point at unknown documents or records are dropped, and a cause left without
+    a verified citation is reduced to low confidence.
     """
     documents_by_id = {document.id: document for document in documents}
     records_by_id = {record.id: record for record in records}
@@ -42,8 +47,30 @@ def evidence_level(causes: Sequence[Cause]) -> EvidenceLevel:
 
 
 def contains_quote(text: str, quote: str) -> bool:
-    """Tell whether the quote occurs in the text, ignoring case and whitespace runs."""
-    return _normalize(quote) in _normalize(text)
+    """Tell whether the quote occurs in the text as whole words.
+
+    Case and runs of whitespace are ignored. A quote that begins or ends in
+    the middle of a word or a number does not count: ``5 bar`` is not found in
+    ``15 bar``.
+    """
+    wanted = _normalize(quote)
+    if not wanted:
+        return False
+    start = r"(?<!\w)" if wanted[0].isalnum() else ""
+    end = r"(?!\w)" if wanted[-1].isalnum() else ""
+    return re.search(f"{start}{re.escape(wanted)}{end}", _normalize(text)) is not None
+
+
+def unsupported_figures(answer: Iterable[str], evidence: Iterable[str]) -> tuple[str, ...]:
+    """List the numbers in the answer that occur nowhere in the evidence.
+
+    Only numbers of two or more digits, or with a decimal part, are checked;
+    a decimal comma and a decimal point are treated alike. Such a number is a
+    reason to distrust the sentence it stands in, not proof that it is wrong:
+    the model may have added two readings or converted a unit.
+    """
+    known = set(_figures(evidence))
+    return tuple(dict.fromkeys(figure for figure in _figures(answer) if figure not in known))
 
 
 def _ground_cause(
@@ -93,8 +120,19 @@ def _ground_document_citation(
         document_title=document.title,
         page=draft.page,
         quote=draft.quote,
-        verified=page is not None and contains_quote(page.text, draft.quote),
+        verified=page is not None
+        and len(draft.quote.split()) >= _SHORTEST_QUOTE
+        and contains_quote(page.text, draft.quote),
     )
+
+
+def _figures(texts: Iterable[str]) -> list[str]:
+    return [
+        match.replace(",", ".")
+        for text in texts
+        for match in _FIGURE.findall(text)
+        if len(match) > 1
+    ]
 
 
 def _normalize(text: str) -> str:

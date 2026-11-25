@@ -7,8 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from machine_fault_triage.evals.scoring import Metric
-from machine_fault_triage.models import TriageResult
-from machine_fault_triage.ports import Usage
+from machine_fault_triage.models import TriageResult, Usage
 
 
 class _Record(BaseModel):
@@ -64,10 +63,18 @@ class MetricSummary(_Record):
 
 
 class Pricing(_Record):
-    """Price of the model under test, in US dollars per million tokens."""
+    """Prices in US dollars per million tokens.
+
+    ``cached_input`` is the price of input tokens read from the provider's
+    prompt cache; without it they are priced as ordinary input. ``embedding``
+    is the price of the embedding model; without it embedding tokens are
+    left out of the cost.
+    """
 
     input: float = Field(ge=0)
     output: float = Field(ge=0)
+    cached_input: float | None = Field(default=None, ge=0)
+    embedding: float | None = Field(default=None, ge=0)
 
 
 class RunReport(_Record):
@@ -78,6 +85,9 @@ class RunReport(_Record):
     dataset_digest: str
     model: str
     library_version: str
+    prompt_version: int | None = None
+    prompt_digest: str | None = None
+    page_selection: str | None = None
     repeats: int = Field(ge=1)
     pricing: Pricing | None = None
     cases: tuple[CaseOutcome, ...]
@@ -94,15 +104,25 @@ class RunReport(_Record):
         return Usage(
             input_tokens=sum(usage.input_tokens for usage in reported),
             output_tokens=sum(usage.output_tokens for usage in reported),
+            cached_input_tokens=sum(usage.cached_input_tokens for usage in reported),
         )
+
+    def embedding_tokens(self) -> int:
+        """Total the tokens that page selection spent on embeddings."""
+        return sum(run.result.embedding_tokens for run in self.runs())
 
     def cost(self) -> float | None:
         """Price the reported tokens in US dollars, when pricing and usage are known."""
         usage = self.usage()
         if usage is None or self.pricing is None:
             return None
+        prices = self.pricing
+        cached_price = prices.input if prices.cached_input is None else prices.cached_input
         return (
-            usage.input_tokens * self.pricing.input + usage.output_tokens * self.pricing.output
+            (usage.input_tokens - usage.cached_input_tokens) * prices.input
+            + usage.cached_input_tokens * cached_price
+            + usage.output_tokens * prices.output
+            + self.embedding_tokens() * (prices.embedding or 0)
         ) / 1_000_000
 
 
@@ -133,11 +153,21 @@ def standard_error(values: list[float]) -> float | None:
     return statistics.stdev(values) / math.sqrt(len(values))
 
 
+def _prompt_label(report: RunReport) -> str:
+    if report.prompt_version is None:
+        return "unknown"
+    return f"v{report.prompt_version} ({report.prompt_digest})"
+
+
+def _pages_label(report: RunReport) -> str:
+    return f"pages: {report.page_selection or 'all'}"
+
+
 def render_summary(report: RunReport) -> str:
     """Format the summary of a run as a plain-text table."""
     lines = [
-        f"dataset {report.dataset}  model {report.model}",
-        f"{len(report.cases)} cases, {report.repeats} repeats",
+        f"dataset {report.dataset}  model {report.model}  prompt {_prompt_label(report)}",
+        f"{len(report.cases)} cases, {report.repeats} repeats, {_pages_label(report)}",
         f"{'metric':<26}{'cases':>6}{'mean':>8}{'se':>8}{'every repeat':>14}",
     ]
     lines.extend(
@@ -156,6 +186,12 @@ def _resources(report: RunReport) -> str:
     usage = report.usage()
     if usage is not None:
         parts.append(f"{usage.input_tokens} input and {usage.output_tokens} output tokens")
+        if usage.cached_input_tokens:
+            parts.append(f"{usage.cached_input_tokens} of the input read from cache")
+    if report.embedding_tokens():
+        priced = report.pricing is not None and report.pricing.embedding is not None
+        left_out = "" if priced or report.cost() is None else ", not in the cost"
+        parts.append(f"{report.embedding_tokens()} embedding tokens{left_out}")
     cost = report.cost()
     if cost is not None:
         parts.append(f"${cost:.2f} in total, ${cost / len(runs):.4f} per run")

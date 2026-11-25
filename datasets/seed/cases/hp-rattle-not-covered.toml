@@ -1,0 +1,10 @@
+id = "hp-rattle-not-covered"
+category = "symptom_not_covered"
+documents = ["velmora-aw90-service-manual"]
+
+[report]
+description = "The outdoor unit makes a loud metallic rattle for a few seconds every time the compressor starts. After that it runs normally and heats fine. No code on the display."
+language = "en"
+
+[expect]
+status = "not_enough_data"

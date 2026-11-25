@@ -1,5 +1,6 @@
 """Evidence-grounded fault triage for field service equipment."""
 
+from machine_fault_triage.embeddings import CachedEmbedder
 from machine_fault_triage.errors import InvalidRequestError, TriageError
 from machine_fault_triage.inputs import Document, FaultReport, Page, ServiceRecord
 from machine_fault_triage.models import (
@@ -13,26 +14,34 @@ from machine_fault_triage.models import (
     HistoryScope,
     TriageResult,
     TriageStatus,
+    Usage,
 )
 from machine_fault_triage.pipeline import run_triage
 from machine_fault_triage.ports import (
     DocumentProvider,
+    Embedder,
     Generation,
     GenerationRequest,
     GenerationStatus,
     HistoryProvider,
+    PageRanker,
+    PageSelector,
+    Selection,
     StructuredModel,
+    TextSplitter,
     UntrustedBlock,
-    Usage,
 )
+from machine_fault_triage.selection import HybridPageSelector, KeywordPageSelector
 
 __all__ = [
+    "CachedEmbedder",
     "Cause",
     "Citation",
     "Confidence",
     "Document",
     "DocumentCitation",
     "DocumentProvider",
+    "Embedder",
     "ErrorCode",
     "EvidenceLevel",
     "FaultReport",
@@ -42,10 +51,16 @@ __all__ = [
     "HistoryCitation",
     "HistoryProvider",
     "HistoryScope",
+    "HybridPageSelector",
     "InvalidRequestError",
+    "KeywordPageSelector",
     "Page",
+    "PageRanker",
+    "PageSelector",
+    "Selection",
     "ServiceRecord",
     "StructuredModel",
+    "TextSplitter",
     "TriageError",
     "TriageResult",
     "TriageStatus",

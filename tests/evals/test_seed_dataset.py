@@ -13,6 +13,7 @@ from machine_fault_triage.evals import (
     Dataset,
     EvalCase,
     ExpectedDocumentEvidence,
+    ExpectedProblem,
     Metric,
     load_dataset,
     run_eval,
@@ -24,27 +25,43 @@ from machine_fault_triage.testing import FakeModel
 SEED = Path(__file__).resolve().parents[2] / "datasets" / "seed"
 
 
-def answer_key(case: EvalCase) -> DraftTriage:
-    if case.expect.status is TriageStatus.NOT_ENOUGH_DATA:
-        return DraftTriage(summary="Not enough evidence.", enough_evidence=False)
+def line_with(dataset: Dataset, expected: ExpectedDocumentEvidence) -> str:
+    (document,) = (item for item in dataset.documents if item.id == expected.document_id)
+    page = document.page(expected.page)
+    assert page is not None
+    return next(line for line in page.text.splitlines() if expected.anchor in line)
+
+
+def expected_cause(problem: ExpectedProblem, dataset: Dataset) -> DraftCause:
     citations: list[DraftCitation] = [
         DraftDocumentCitation(
-            document_id=expected.document_id, page=expected.page, quote=expected.anchor
+            document_id=expected.document_id,
+            page=expected.page,
+            quote=line_with(dataset, expected),
         )
         if isinstance(expected, ExpectedDocumentEvidence)
         else DraftHistoryCitation(record_id=expected.record_id)
-        for expected in case.expect.evidence
+        for expected in problem.evidence
     ]
-    cause = DraftCause(
-        title=" ".join(group[0] for group in case.expect.cause_terms),
+    return DraftCause(
+        title=" ".join(group[0] for group in problem.cause_terms),
         confidence=Confidence.HIGH,
         why="Taken from the expected evidence.",
         citations=tuple(citations),
     )
+
+
+def answer_key(case: EvalCase, dataset: Dataset) -> DraftTriage:
+    if case.expect.status is TriageStatus.NOT_ENOUGH_DATA:
+        return DraftTriage(summary="Not enough evidence.", enough_evidence=False)
+    expected_causes = case.expect.problems or (
+        ExpectedProblem(cause_terms=case.expect.cause_terms, evidence=case.expect.evidence),
+    )
     return DraftTriage(
         summary="Expected answer.",
         enough_evidence=True,
-        causes=(cause,),
+        causes=tuple(expected_cause(problem, dataset) for problem in expected_causes),
+        missing=case.expect.not_covered[:1],
         safety_warnings=("Isolate and depressurise first.",) if case.expect.safety_warning else (),
     )
 
@@ -58,10 +75,11 @@ def test_seed_dataset_covers_both_devices_and_the_planned_categories() -> None:
     dataset = load_dataset(SEED)
 
     categories = Counter(case.category for case in dataset.cases)
-    assert len(dataset.cases) == 15
+    assert len(dataset.cases) == 18
+    assert categories["two_problems"] == 2
     assert {case.id.split("-")[0] for case in dataset.cases} == {"hp", "sp"}
     assert {"injection_report", "injection_document", "injection_history"} <= set(categories)
-    assert sum(case.expect.status is TriageStatus.NOT_ENOUGH_DATA for case in dataset.cases) == 4
+    assert sum(case.expect.status is TriageStatus.NOT_ENOUGH_DATA for case in dataset.cases) == 5
 
 
 def test_every_answerable_seed_case_names_the_evidence_for_its_answer() -> None:
@@ -70,16 +88,22 @@ def test_every_answerable_seed_case_names_the_evidence_for_its_answer() -> None:
     without_evidence = [
         case.id
         for case in dataset.cases
-        if case.expect.status is TriageStatus.OK and not case.expect.evidence
+        if case.expect.status is TriageStatus.OK and not case.expect.all_evidence
     ]
     assert without_evidence == []
 
 
 def test_answer_key_scores_one_on_every_metric() -> None:
     dataset = load_dataset(SEED)
-    model = FakeModel([answer_key(case) for case in dataset.cases])
+    model = FakeModel([answer_key(case, dataset) for case in dataset.cases])
 
-    assert means(dataset, model) == dict.fromkeys(Metric, 1)
+    retrieval = {
+        Metric.RETRIEVAL_RECALL,
+        Metric.RETRIEVAL_PRECISION,
+        Metric.RECIPROCAL_RANK,
+        Metric.RETRIEVAL_NDCG,
+    }
+    assert means(dataset, model) == dict.fromkeys(set(Metric) - retrieval, 1)
 
 
 def test_model_that_always_abstains_only_passes_the_abstention_cases() -> None:
@@ -94,3 +118,5 @@ def test_model_that_always_abstains_only_passes_the_abstention_cases() -> None:
     assert scores[Metric.TOP_CAUSE] == 0
     assert scores[Metric.EXPECTED_EVIDENCE] == 0
     assert scores[Metric.INJECTION_RESISTED] == 0
+    assert scores[Metric.EVERY_PROBLEM_ANSWERED] == 0
+    assert scores[Metric.UNCOVERED_LEFT_OPEN] == 0

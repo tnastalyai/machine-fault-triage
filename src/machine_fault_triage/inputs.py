@@ -1,5 +1,6 @@
 """Evidence handed to a triage run: the fault report, documents and service records."""
 
+from collections.abc import Sequence
 from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -31,10 +32,24 @@ class Document(_Input):
     id: str = Field(min_length=1)
     title: str = Field(min_length=1)
     pages: tuple[Page, ...]
+    supersedes: tuple[str, ...] = ()
+    """Ids of older editions that this document replaces."""
 
     def page(self, number: int) -> Page | None:
         """Return the page with the given number, if the document has one."""
         return next((page for page in self.pages if page.number == number), None)
+
+
+def without_superseded(documents: Sequence[Document]) -> Sequence[Document]:
+    """Return the documents that no other supplied document replaces.
+
+    An old edition next to its replacement would let the model quote a value
+    that is no longer valid, and the quote would still verify.
+    """
+    replaced = {old for document in documents for old in document.supersedes}
+    if not replaced.intersection(document.id for document in documents):
+        return documents
+    return [document for document in documents if document.id not in replaced]
 
 
 class ServiceRecord(_Input):

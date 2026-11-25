@@ -1,0 +1,20 @@
+id = "hp-one-problem-not-covered"
+category = "two_problems"
+documents = ["velmora-aw90-service-manual"]
+
+[report]
+description = "The display keeps showing A12 and the radiators are cold. Also, for a week the outdoor unit has made a loud metallic rattle for a few seconds every time the compressor starts."
+language = "en"
+
+[expect]
+status = "ok"
+not_covered = ["rattle", "rattling", "metallic", "noise"]
+
+[[expect.problems]]
+cause_terms = [["flow"], ["strainer", "vent", "air in"]]
+
+[[expect.problems.evidence]]
+type = "document"
+document_id = "velmora-aw90-service-manual"
+page = 14
+anchor = "A12"

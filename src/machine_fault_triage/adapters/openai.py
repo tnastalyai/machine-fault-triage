@@ -1,5 +1,6 @@
-"""OpenAI models behind the ``StructuredModel`` port. Needs the ``openai`` extra."""
+"""OpenAI models behind the model and embedder ports. Needs the ``openai`` extra."""
 
+from collections.abc import Sequence
 from typing import Any, Literal
 
 import openai
@@ -15,13 +16,16 @@ from pydantic import BaseModel, ValidationError
 
 from machine_fault_triage.adapters._evidence import OPENING, new_boundary, with_boundary_rule, wrap
 from machine_fault_triage.errors import ModelCallError
+from machine_fault_triage.models import Usage
 from machine_fault_triage.ports import (
+    Embeddings,
     Generation,
     GenerationRequest,
     GenerationStatus,
     UntrustedBlock,
-    Usage,
 )
+
+_EMBEDDING_BATCH = 32
 
 ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 
@@ -100,6 +104,55 @@ class OpenAIModel:
         return Generation[OutputT](status=GenerationStatus.COMPLETED, output=output, usage=usage)
 
 
+class OpenAIEmbedder:
+    """An OpenAI embedding model behind the ``Embedder`` port.
+
+    Pages and fault reports are sent to the embeddings endpoint as they are.
+    Wrap it in ``CachedEmbedder`` to pay for each page only once.
+    """
+
+    def __init__(self, model: str, *, client: openai.OpenAI | None = None) -> None:
+        """Choose the embedding model id and optionally a configured client.
+
+        Without ``client`` the SDK reads its credentials from the environment.
+        """
+        self._model = model
+        self._client = client or openai.OpenAI()
+
+    def embed_pages(self, texts: Sequence[str]) -> Embeddings:
+        """Return one vector per page, in the order given, and the tokens billed.
+
+        Raises:
+            ModelCallError: If the API call fails after the SDK's own retries.
+        """
+        vectors: list[Sequence[float]] = []
+        tokens = 0
+        for start in range(0, len(texts), _EMBEDDING_BATCH):
+            batch = self._embed(list(texts[start : start + _EMBEDDING_BATCH]))
+            vectors.extend(batch.vectors)
+            tokens += batch.tokens
+        return Embeddings(vectors, tokens)
+
+    def embed_query(self, text: str) -> Embeddings:
+        """Return the vector of a fault report and the tokens billed.
+
+        Raises:
+            ModelCallError: If the API call fails after the SDK's own retries.
+        """
+        return self._embed([text])
+
+    def _embed(self, texts: list[str]) -> Embeddings:
+        try:
+            response = self._client.embeddings.create(
+                model=self._model, input=texts, encoding_format="float"
+            )
+        except openai.OpenAIError as error:
+            message = f"the OpenAI API call failed: {error}"
+            raise ModelCallError(message) from error
+        vectors = [item.embedding for item in sorted(response.data, key=lambda item: item.index)]
+        return Embeddings(vectors, response.usage.total_tokens if response.usage else 0)
+
+
 def _status_without_output(response: Response) -> GenerationStatus | None:
     refused = any(
         content.type == "refusal"
@@ -118,8 +171,11 @@ def _status_without_output(response: Response) -> GenerationStatus | None:
 def _usage(response: Response) -> Usage | None:
     if response.usage is None:
         return None
+    details = response.usage.input_tokens_details
     return Usage(
-        input_tokens=response.usage.input_tokens, output_tokens=response.usage.output_tokens
+        input_tokens=response.usage.input_tokens,
+        output_tokens=response.usage.output_tokens,
+        cached_input_tokens=details.cached_tokens if details else 0,
     )
 
 

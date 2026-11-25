@@ -4,7 +4,7 @@ from pathlib import Path
 from machine_fault_triage.drafts import DraftTriage
 from machine_fault_triage.evals import Dataset, EvalCase, Expectation, ExpectedDocumentEvidence
 from machine_fault_triage.models import TriageStatus
-from machine_fault_triage.testing import FakeModel
+from machine_fault_triage.testing import FakeEmbedder, FakeModel
 from tests.factories import (
     MANUAL_ID,
     draft_cause,
@@ -105,6 +105,10 @@ def correct_model() -> FakeModel:
 
 def abstaining_model() -> FakeModel:
     return FakeModel([abstaining_draft()])
+
+
+def configured_embedder(word: str = "sensor") -> FakeEmbedder:
+    return FakeEmbedder({word: [1.0, 0.0]})
 
 
 def configured_model(answer: str) -> FakeModel:

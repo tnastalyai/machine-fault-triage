@@ -1,9 +1,24 @@
+from collections.abc import Sequence
+from pathlib import Path
+
 import pytest
 
-from machine_fault_triage import GenerationStatus, InvalidRequestError, TriageStatus, Usage
+from machine_fault_triage import (
+    CachedEmbedder,
+    Document,
+    FaultReport,
+    GenerationStatus,
+    HybridPageSelector,
+    InvalidRequestError,
+    KeywordPageSelector,
+    Selection,
+    TriageStatus,
+    Usage,
+)
 from machine_fault_triage.evals import Metric, Pricing, RunReport, run_eval, summarize
 from machine_fault_triage.evals.report import render_summary
-from machine_fault_triage.testing import FakeModel
+from machine_fault_triage.prompts import instructions, prompt_digest
+from machine_fault_triage.testing import FakeEmbedder, FakeModel
 from tests.evals.factories import (
     abstaining_draft,
     answerable_case,
@@ -102,10 +117,100 @@ def test_cost_is_unknown_without_usage_or_without_pricing() -> None:
     assert "$" not in render_summary(unpriced)
 
 
+def test_stored_page_vectors_cost_no_embedding_tokens_on_a_later_run(tmp_path: Path) -> None:
+    embedder = CachedEmbedder(
+        FakeEmbedder({"E7": [1.0, 0.0]}, tokens_per_text=5), tmp_path / "v.sqlite", model="m1"
+    )
+    tiny = dataset([answerable_case()])
+    written = sum(bool(page.text.strip()) for doc in tiny.documents for page in doc.pages)
+
+    first, later = (
+        run_eval(tiny, FakeModel([correct_draft()]), model_label="x", pages=_OnlySelect(embedder))
+        for _ in range(2)
+    )
+
+    assert written > 1
+    assert first.embedding_tokens() == 5 * (written + 1)
+    assert later.embedding_tokens() == 5
+
+
+class _OnlySelect:
+    def __init__(self, embedder: CachedEmbedder) -> None:
+        self._selector = HybridPageSelector(embedder, 1)
+
+    def select(self, report: FaultReport, documents: Sequence[Document]) -> Selection:
+        return self._selector.select(report, documents)
+
+
+class FirstPages:
+    def select(self, report: FaultReport, documents: Sequence[Document]) -> Selection:
+        del report
+        first = [
+            document.model_copy(update={"pages": document.pages[:1]}) for document in documents
+        ]
+        return Selection(first, 1_000_000)
+
+
+def test_cached_and_embedding_tokens_are_priced_at_their_own_rates() -> None:
+    usage = Usage(input_tokens=3_000_000, output_tokens=1_000_000, cached_input_tokens=2_000_000)
+
+    report = run_eval(
+        dataset([answerable_case()]),
+        FakeModel([correct_draft()], usage=usage),
+        model_label="x",
+        pages=FirstPages(),
+        pricing=Pricing(input=2, output=10, cached_input=0.5, embedding=0.1),
+    )
+    one_price = report.model_copy(update={"pricing": Pricing(input=2, output=10)})
+
+    assert report.embedding_tokens() == 1_000_000
+    assert report.cost() == pytest.approx(13.1)
+    assert one_price.cost() == 16
+    assert "2000000 of the input read from cache" in render_summary(report)
+    assert "1000000 embedding tokens, $" in render_summary(report)
+    assert "1000000 embedding tokens, not in the cost" in render_summary(one_price)
+
+
 def test_report_round_trips_through_json() -> None:
     report = run_eval(dataset([answerable_case()]), FakeModel([correct_draft()]), model_label="x")
 
     assert RunReport.model_validate_json(report.model_dump_json()) == report
+
+
+def test_summary_names_the_prompt_the_run_used() -> None:
+    report = run_eval(dataset([answerable_case()]), FakeModel([correct_draft()]), model_label="x")
+    older = report.model_copy(update={"prompt_version": None, "prompt_digest": None})
+
+    assert f"prompt v{report.prompt_version} ({report.prompt_digest})" in render_summary(report)
+    assert "prompt unknown" in render_summary(older)
+
+
+def test_page_selection_is_applied_to_every_case_and_recorded() -> None:
+    model = FakeModel([correct_draft()])
+    pages = KeywordPageSelector(1)
+
+    report = run_eval(
+        dataset([answerable_case()]),
+        model,
+        model_label="x",
+        pages=pages,
+        page_selection=pages.description,
+    )
+
+    (request,) = model.requests
+    assert sum("page=" in block.label for block in request.untrusted) == 1
+    assert report.page_selection == "keyword, at most 1 pages"
+    assert "pages: keyword, at most 1 pages" in render_summary(report)
+    assert "pages: all" in render_summary(report.model_copy(update={"page_selection": None}))
+
+
+def test_older_prompt_version_is_run_and_recorded() -> None:
+    model = FakeModel([correct_draft()])
+
+    report = run_eval(dataset([answerable_case()]), model, model_label="x", prompt_version=1)
+
+    assert model.requests[0].instructions == instructions(1)
+    assert (report.prompt_version, report.prompt_digest) == (1, prompt_digest(1))
 
 
 def test_fewer_than_one_repeat_is_rejected() -> None:

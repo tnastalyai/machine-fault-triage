@@ -6,7 +6,7 @@ import openai
 import pytest
 
 from machine_fault_triage import GenerationRequest, GenerationStatus, UntrustedBlock, Usage
-from machine_fault_triage.adapters.openai import OpenAIModel, ReasoningEffort
+from machine_fault_triage.adapters.openai import OpenAIEmbedder, OpenAIModel, ReasoningEffort
 from machine_fault_triage.drafts import DraftTriage
 from machine_fault_triage.errors import ModelCallError
 from tests.factories import draft_cause, draft_triage, manual_citation
@@ -18,7 +18,13 @@ REQUEST = GenerationRequest(
         UntrustedBlock(label="document id=manual-1 page=77", content="E7: flow sensor"),
     ),
 )
-USAGE = {"input_tokens": 100, "output_tokens": 5, "total_tokens": 105}
+USAGE = {
+    "input_tokens": 100,
+    "input_tokens_details": {"cached_tokens": 40},
+    "output_tokens": 5,
+    "output_tokens_details": {"reasoning_tokens": 0},
+    "total_tokens": 105,
+}
 
 
 class FakeApi:
@@ -85,7 +91,7 @@ def test_schema_valid_answer_is_returned_with_its_usage() -> None:
 
     assert generation.status is GenerationStatus.COMPLETED
     assert generation.output == draft
-    assert generation.usage == Usage(input_tokens=100, output_tokens=5)
+    assert generation.usage == Usage(input_tokens=100, output_tokens=5, cached_input_tokens=40)
 
 
 def test_instructions_and_evidence_travel_in_separate_fields() -> None:
@@ -156,13 +162,22 @@ def test_answer_without_usable_output_is_reported_through_the_status(
 
     assert generation.status is status
     assert generation.output is None
-    assert generation.usage == Usage(input_tokens=100, output_tokens=5)
+    assert generation.usage == Usage(input_tokens=100, output_tokens=5, cached_input_tokens=40)
 
 
 def test_missing_usage_is_reported_as_unknown() -> None:
     api = FakeApi(answer(draft_triage([]).model_dump_json(), usage=None))
 
     assert model_for(api).generate(REQUEST, DraftTriage).usage is None
+
+
+def test_usage_without_a_cache_breakdown_counts_no_cached_tokens() -> None:
+    plain = {"input_tokens": 100, "output_tokens": 5, "total_tokens": 105}
+    api = FakeApi(answer(draft_triage([]).model_dump_json(), usage=plain))
+
+    usage = model_for(api).generate(REQUEST, DraftTriage).usage
+
+    assert usage == Usage(input_tokens=100, output_tokens=5)
 
 
 def test_failed_api_call_is_raised_as_a_library_error() -> None:
@@ -176,3 +191,82 @@ def test_client_is_created_from_the_environment_by_default(
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     assert isinstance(OpenAIModel("gpt-test"), OpenAIModel)
+
+
+class FakeEmbeddingApi:
+    def __init__(self, *, status: int = 200, reports_usage: bool = True) -> None:
+        self.requests: list[dict[str, Any]] = []
+        self._status = status
+        self._reports_usage = reports_usage
+
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
+        sent = json.loads(request.content)
+        self.requests.append(sent)
+        if self._status != httpx2.codes.OK:
+            return httpx2.Response(self._status, json={"error": {"message": "boom"}})
+        data = [
+            {"object": "embedding", "index": index, "embedding": [float(len(text)), 1.0]}
+            for index, text in enumerate(sent["input"])
+        ]
+        tokens = sum(len(text) for text in sent["input"])
+        usage = {"prompt_tokens": tokens, "total_tokens": tokens}
+        body = {"object": "list", "model": sent["model"], "data": data[::-1]}
+        if self._reports_usage:
+            body["usage"] = usage
+        return httpx2.Response(200, json=body)
+
+
+def embedder_for(api: FakeEmbeddingApi) -> OpenAIEmbedder:
+    client = openai.OpenAI(
+        api_key="test-key",
+        max_retries=0,
+        http_client=openai.DefaultHttpxClient(transport=httpx2.MockTransport(api)),
+    )
+    return OpenAIEmbedder("embed-test", client=client)
+
+
+def test_pages_come_back_as_vectors_in_the_order_given() -> None:
+    api = FakeEmbeddingApi()
+
+    vectors = embedder_for(api).embed_pages(["a", "bbb", "cc"])
+
+    assert vectors == ([[1.0, 1.0], [3.0, 1.0], [2.0, 1.0]], 6)
+    assert api.requests == [
+        {"model": "embed-test", "input": ["a", "bbb", "cc"], "encoding_format": "float"}
+    ]
+
+
+def test_many_pages_are_sent_in_several_requests() -> None:
+    api = FakeEmbeddingApi()
+
+    vectors, tokens = embedder_for(api).embed_pages(["x" * (index + 1) for index in range(70)])
+
+    assert [len(sent["input"]) for sent in api.requests] == [32, 32, 6]
+    assert [vector[0] for vector in vectors] == [float(index + 1) for index in range(70)]
+    assert tokens == sum(range(1, 71))
+
+
+def test_fault_report_is_embedded_on_its_own() -> None:
+    api = FakeEmbeddingApi()
+
+    assert embedder_for(api).embed_query("abcd") == ([[4.0, 1.0]], 4)
+    assert api.requests[0]["input"] == ["abcd"]
+
+
+def test_embedding_answer_without_usage_counts_no_tokens() -> None:
+    api = FakeEmbeddingApi(reports_usage=False)
+
+    assert embedder_for(api).embed_query("abcd") == ([[4.0, 1.0]], 0)
+
+
+def test_failed_embedding_call_is_raised_as_a_library_error() -> None:
+    with pytest.raises(ModelCallError, match="the OpenAI API call failed"):
+        embedder_for(FakeEmbeddingApi(status=500)).embed_query("abcd")
+
+
+def test_embedder_client_is_created_from_the_environment_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    assert isinstance(OpenAIEmbedder("embed-test"), OpenAIEmbedder)

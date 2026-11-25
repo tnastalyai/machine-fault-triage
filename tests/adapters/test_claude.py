@@ -71,7 +71,7 @@ def test_schema_valid_answer_is_returned_as_the_requested_type() -> None:
 
     assert generation.status is GenerationStatus.COMPLETED
     assert generation.output == draft
-    assert generation.usage == Usage(input_tokens=100, output_tokens=5)
+    assert generation.usage == Usage(input_tokens=100, output_tokens=5, cached_input_tokens=90)
 
 
 def test_instructions_go_to_the_system_prompt_and_evidence_to_the_user_message() -> None:
@@ -132,7 +132,7 @@ def test_answer_without_usable_output_is_reported_through_the_status(
 
     assert generation.status is status
     assert generation.output is None
-    assert generation.usage == Usage(input_tokens=100, output_tokens=5)
+    assert generation.usage == Usage(input_tokens=100, output_tokens=5, cached_input_tokens=90)
 
 
 def test_failed_api_call_is_raised_as_a_library_error() -> None:
@@ -151,7 +151,8 @@ def test_client_is_created_from_the_environment_by_default(
 def test_core_package_does_not_import_a_provider_sdk() -> None:
     script = (
         "import sys, machine_fault_triage.cli;"
-        "sys.exit('anthropic' in sys.modules or 'openai' in sys.modules)"
+        "optional = ('anthropic', 'openai', 'pypdfium2', 'chonkie');"
+        "sys.exit(any(name in sys.modules for name in optional))"
     )
 
     completed = subprocess.run([sys.executable, "-c", script], check=False)  # noqa: S603
