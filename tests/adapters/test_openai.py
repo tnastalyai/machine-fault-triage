@@ -120,10 +120,22 @@ def test_instructions_and_evidence_travel_in_separate_fields() -> None:
     assert "Display shows E7." not in sent["instructions"]
     assert message["role"] == "user"
     assert tag.startswith("<evidence-")
-    assert tag.strip("<>") in sent["instructions"]
+    assert tag.strip("<>") not in sent["instructions"]
+    assert tag.strip("<>").rsplit("-", maxsplit=1)[0] in sent["instructions"]
     assert "source: fault report\nDisplay shows E7." in evidence[0]
     assert "source: document id=manual-1 page=77\nE7: flow sensor" in evidence[1]
     assert "reasoning" not in sent
+
+
+def test_repeated_request_is_sent_byte_for_byte_so_the_provider_can_cache_it() -> None:
+    api = FakeApi()
+    model = model_for(api)
+
+    model.generate(REQUEST, DraftTriage)
+    model.generate(REQUEST, DraftTriage)
+
+    first, second = api.requests
+    assert first == second
 
 
 def test_schema_is_sent_in_the_strict_dialect_the_api_accepts() -> None:

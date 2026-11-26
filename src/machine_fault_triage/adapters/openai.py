@@ -16,7 +16,7 @@ from openai.types.responses import (
 from openai.types.shared_params import Reasoning
 from pydantic import BaseModel, ValidationError
 
-from machine_fault_triage.adapters._evidence import OPENING, new_boundary, with_boundary_rule, wrap
+from machine_fault_triage.adapters._evidence import OPENING, with_boundary_rule, wrap
 from machine_fault_triage.errors import ModelCallError
 from machine_fault_triage.inputs import Photo
 from machine_fault_triage.models import Usage, total_usage
@@ -40,8 +40,8 @@ class OpenAIModel:
     """A model served through the OpenAI Responses API that answers in the requested schema.
 
     Instructions go into the ``instructions`` field. Untrusted blocks go into
-    the user message, each wrapped in a tag whose name is random per request,
-    so document text cannot forge the end of its own block. The answer is
+    the user message, each wrapped in a tag named after a keyed digest of the
+    block, so document text cannot forge the end of its own block. The answer is
     constrained to the schema by the API and validated again here.
     """
 
@@ -70,10 +70,7 @@ class OpenAIModel:
         Raises:
             ModelCallError: If the API call fails after the SDK's own retries.
         """
-        boundary = new_boundary()
-        evidence = EasyInputMessageParam(
-            role="user", content=_evidence(request.untrusted, boundary)
-        )
+        evidence = EasyInputMessageParam(role="user", content=_evidence(request.untrusted))
         answer_format = ResponseTextConfigParam(
             format={
                 "type": "json_schema",
@@ -90,7 +87,7 @@ class OpenAIModel:
         try:
             response = self._client.responses.create(
                 model=self._model,
-                instructions=with_boundary_rule(request.instructions, boundary),
+                instructions=with_boundary_rule(request.instructions),
                 input=[evidence],
                 text=answer_format,
                 max_output_tokens=self._max_output_tokens,
@@ -243,15 +240,10 @@ def _usage(response: Response) -> Usage | None:
     )
 
 
-def _evidence(
-    blocks: tuple[UntrustedBlock, ...], boundary: str
-) -> ResponseInputMessageContentListParam:
+def _evidence(blocks: tuple[UntrustedBlock, ...]) -> ResponseInputMessageContentListParam:
     return [
         {"type": "input_text", "text": OPENING},
-        *(
-            ResponseInputTextParam(type="input_text", text=wrap(block, boundary))
-            for block in blocks
-        ),
+        *(ResponseInputTextParam(type="input_text", text=wrap(block)) for block in blocks),
     ]
 
 

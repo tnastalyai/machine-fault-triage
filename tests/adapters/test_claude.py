@@ -92,19 +92,19 @@ def test_instructions_go_to_the_system_prompt_and_evidence_to_the_user_message()
     assert "effort" not in sent["output_config"]
 
 
-def test_evidence_is_wrapped_in_a_tag_that_changes_with_every_request() -> None:
+def test_repeated_request_is_sent_byte_for_byte_with_no_tag_named_in_the_system_prompt() -> None:
     api = FakeApi()
     model = model_for(api)
 
     model.generate(REQUEST, DraftTriage)
     model.generate(REQUEST, DraftTriage)
 
-    first, second = (sent["messages"][0]["content"][1]["text"] for sent in api.requests)
-    tag = first.split("\n", maxsplit=1)[0]
+    first, second = api.requests
+    tag = first["messages"][0]["content"][1]["text"].split("\n", maxsplit=1)[0]
+    assert first == second
     assert tag.startswith("<evidence-")
-    assert first.endswith(tag.replace("<", "</"))
-    assert tag.strip("<>") in api.requests[0]["system"]
-    assert first != second
+    assert tag.strip("<>") not in first["system"]
+    assert tag.strip("<>").rsplit("-", maxsplit=1)[0] in first["system"]
 
 
 def test_effort_is_sent_when_configured() -> None:

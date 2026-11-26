@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- The tags an adapter wraps evidence in no longer change with every request. A tag name is now a family that the instructions name, the same for the whole process, and a keyed digest of the block, so the instructions and every page are sent byte for byte the same from one request to the next and a provider can serve them from its prompt cache. On the seed dataset with the OpenAI adapter, two repeats, 100,345 of 144,838 input tokens were read from the cache, against none before. A forged tag is now told from a real one by its family, and after a leak of the family only by its code, which is weaker than a name drawn per request; a probe with forged tags and what it does not show are in [docs/prompts.md](docs/prompts.md).
+
 ### Added
 
 - `eval judge REPORT --dataset DIR --judge MODULE:CALLABLE --out FILE` and `judge_run`: a judging model's opinion on whether the verified quotes and cited records of each cause support it, added to a finished report as `quote_supports_cause` with the verdict and reason per cause. No triage is run again. The report names the judge and the fingerprint of its instructions, a comparison says when two runs were judged differently, and a cause the judge could not answer for is left unjudged with the reason, while a judge that answers for none fails the command. `--context` shows the judge each quote with its paragraph, `--workers N` makes several calls at once, and the summary counts the verdicts, the first causes supported and the causes left out for lack of verified evidence ([ADR 0002](docs/adr/0002-score-evaluations-in-code.md)).

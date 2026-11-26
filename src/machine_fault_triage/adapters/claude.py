@@ -6,7 +6,7 @@ import anthropic
 from anthropic.types import OutputConfigParam, TextBlockParam
 from pydantic import BaseModel, ValidationError
 
-from machine_fault_triage.adapters._evidence import OPENING, new_boundary, with_boundary_rule, wrap
+from machine_fault_triage.adapters._evidence import OPENING, with_boundary_rule, wrap
 from machine_fault_triage.errors import ModelCallError
 from machine_fault_triage.models import Usage
 from machine_fault_triage.ports import (
@@ -24,7 +24,7 @@ class ClaudeModel:
     """A Claude model that answers in the requested schema.
 
     Instructions go into the system prompt. Untrusted blocks go into the user
-    message, each wrapped in a tag whose name is random per request, so
+    message, each wrapped in a tag named after a keyed digest of the block, so
     document text cannot forge the end of its own block. The answer is
     constrained to the schema by the API and validated again here.
     """
@@ -54,13 +54,12 @@ class ClaudeModel:
         Raises:
             ModelCallError: If the API call fails after the SDK's own retries.
         """
-        boundary = new_boundary()
         try:
             message = self._client.messages.create(
                 model=self._model,
                 max_tokens=self._max_tokens,
-                system=with_boundary_rule(request.instructions, boundary),
-                messages=[{"role": "user", "content": _evidence(request.untrusted, boundary)}],
+                system=with_boundary_rule(request.instructions),
+                messages=[{"role": "user", "content": _evidence(request.untrusted)}],
                 output_config=self._output_config(output_type),
             )
         except anthropic.APIError as error:
@@ -99,8 +98,8 @@ def _usage(usage: anthropic.types.Usage) -> Usage:
     )
 
 
-def _evidence(blocks: tuple[UntrustedBlock, ...], boundary: str) -> list[TextBlockParam]:
+def _evidence(blocks: tuple[UntrustedBlock, ...]) -> list[TextBlockParam]:
     return [
         {"type": "text", "text": OPENING},
-        *(TextBlockParam(type="text", text=wrap(block, boundary)) for block in blocks),
+        *(TextBlockParam(type="text", text=wrap(block)) for block in blocks),
     ]
