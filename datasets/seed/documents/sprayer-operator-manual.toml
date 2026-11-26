@@ -95,9 +95,9 @@ number = 28
 text = """
 Check 2: fold valve Y14 on the hydraulic block. Measure the coil: 7 to 9 Ohm. A coil outside this range is replaced together with its plug.
 
-Check 3: restrictor in the line to the fold cylinders. Wings that fold fully but take longer than 45 s have a restrictor blocked by paint flakes or sealing tape. Remove the restrictor, 1.2 mm bore, clean it and refit it with the arrow towards the cylinder.
+Check 3: restrictor in the line to the fold cylinders. A boom that folds fully but takes longer than 45 s has a restrictor blocked by paint flakes or sealing tape. Remove the restrictor, 1.2 mm bore, clean it and refit it with the arrow towards the cylinder.
 
-Before loosening any fitting on the hydraulic block, lower the wings onto the transport rests and relieve the oil pressure. Wings held only by oil pressure can drop.
+Before loosening any fitting on the hydraulic block, lower the boom onto the transport rests and relieve the oil pressure. A boom held only by oil pressure can drop.
 """
 
 [[pages]]
