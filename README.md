@@ -46,6 +46,8 @@ flowchart LR
 | Verify | Quotes are checked against the pages sent, records against the history, numbers against the evidence | `grounding.py`, `pipeline.py` |
 | Measure | The same pipeline runs over a dataset; metrics are computed in code | `evals/` |
 
+[docs/architecture.md](docs/architecture.md) follows one report call by call, with what goes into each step, what comes out and what can go wrong, and shows how manuals are read and how a change is evaluated.
+
 ## Quickstart
 
 Runs offline: `FakeModel` returns a scripted draft, and the library verifies it.
