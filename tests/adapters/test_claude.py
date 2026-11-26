@@ -7,10 +7,17 @@ import anthropic
 import httpx2
 import pytest
 
-from machine_fault_triage import GenerationRequest, GenerationStatus, UntrustedBlock, Usage
-from machine_fault_triage.adapters.claude import ClaudeModel, Effort
+from machine_fault_triage import (
+    GenerationRequest,
+    GenerationStatus,
+    Photo,
+    UntrustedBlock,
+    Usage,
+)
+from machine_fault_triage.adapters.claude import ClaudeModel, ClaudePhotoReader, Effort
 from machine_fault_triage.drafts import DraftTriage
 from machine_fault_triage.errors import ModelCallError
+from machine_fault_triage.prompts import PHOTO_READING
 from tests.factories import draft_cause, draft_triage, manual_citation
 
 REQUEST = GenerationRequest(
@@ -155,6 +162,67 @@ def test_client_is_created_from_the_environment_by_default(
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
     assert isinstance(ClaudeModel("claude-test"), ClaudeModel)
+
+
+PHOTO = Photo(media_type="image/jpeg", data=b"\xff\xd8 display")
+
+
+def reader_for(api: FakeApi) -> ClaudePhotoReader:
+    client = anthropic.Anthropic(
+        api_key="test-key",
+        max_retries=0,
+        http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(api)),
+    )
+    return ClaudePhotoReader("claude-test", client=client)
+
+
+def test_each_photo_is_read_in_a_call_of_its_own_and_the_usage_is_added_up() -> None:
+    api = FakeApi(text="  Display shows E7.\n")
+
+    readings = reader_for(api).read([PHOTO, PHOTO])
+
+    assert readings.texts == ["Display shows E7.", "Display shows E7."]
+    assert readings.usage == Usage(input_tokens=200, output_tokens=10, cached_input_tokens=180)
+    assert len(api.requests) == len(readings.texts)
+
+
+def test_photo_travels_as_an_image_apart_from_the_fixed_reading_instructions() -> None:
+    api = FakeApi(text="Display shows E7.")
+
+    reader_for(api).read([PHOTO])
+
+    (sent,) = api.requests
+    (message,) = sent["messages"]
+    assert sent["system"] == PHOTO_READING
+    assert message["content"] == [
+        {
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/jpeg", "data": "/9ggZGlzcGxheQ=="},
+        }
+    ]
+
+
+@pytest.mark.parametrize("stop_reason", ["refusal", "max_tokens"])
+def test_photo_the_model_declines_or_does_not_finish_gets_an_empty_reading(
+    stop_reason: str,
+) -> None:
+    readings = reader_for(FakeApi(text="E", stop_reason=stop_reason)).read([PHOTO])
+
+    assert readings.texts == [""]
+    assert readings.usage == Usage(input_tokens=100, output_tokens=5, cached_input_tokens=90)
+
+
+def test_failed_photo_reading_call_is_raised_as_a_library_error() -> None:
+    with pytest.raises(ModelCallError, match="the Claude API call failed"):
+        reader_for(FakeApi(status=500)).read([PHOTO])
+
+
+def test_photo_reader_is_created_from_the_environment_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    assert isinstance(ClaudePhotoReader("claude-test"), ClaudePhotoReader)
 
 
 def test_core_package_does_not_import_a_provider_sdk() -> None:
