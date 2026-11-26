@@ -152,7 +152,7 @@ uv run machine-fault-triage eval compare runs/baseline.json runs/sonnet.json
 
 ## Limitations
 
-- Verification proves that a quote exists on the page, not that it supports the cause.
+- Verification proves that a quote exists on the page, not that it supports the cause. `eval judge` asks a model for that opinion in evaluation only; a triage result carries no such check.
 - `evidence_limit` and `report_limit` count characters, not tokens. The default of the first suits models with a large context window; set both for the models in use.
 - A report needs some text even when its photos say everything. A photo is read by a model, and nothing checks the reading: a misread code leads to verified quotes for the wrong code. `TriageResult.photo_readings` returns what was read so that a person can compare it with the photo. Photos are sent to the provider as given, metadata included; strip it first if that matters. The reader has been tried on synthetic images only, not on real photos of displays.
 - `device_model` is passed to the model as evidence. Whether the answer kept to that model's row of a table is measured in evaluation (`right_model`), not verified in code, and page selection does not use the model name.
@@ -171,7 +171,7 @@ uv run machine-fault-triage eval compare runs/baseline.json runs/sonnet.json
 
 1. Hand-written cases and a first published baseline: accuracy, cost and latency
 2. A reranker over the selected pages
-3. A judging model for whether a quote supports its cause
+3. The judging model validated against human labels, and extended to the top cause
 4. Tool-using agent variant, compared against the fixed pipeline
 5. Postgres adapter and full evaluation report
 

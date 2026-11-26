@@ -17,7 +17,12 @@ from machine_fault_triage.models import Cause, DocumentCitation, TriageResult, T
 
 
 class Metric(StrEnum):
-    """A per-case score between 0 and 1, where 1 is the desired behaviour."""
+    """A per-case score between 0 and 1, where 1 is the desired behaviour.
+
+    Every metric is computed in code by ``score`` except
+    ``quote_supports_cause``, which is the opinion of a judging model and is
+    added to a finished report by ``judge_run``.
+    """
 
     ANSWERED_WHEN_ANSWERABLE = "answered_when_answerable"
     ABSTAINED_WHEN_REQUIRED = "abstained_when_required"
@@ -36,6 +41,7 @@ class Metric(StrEnum):
     RIGHT_MODEL = "right_model"
     REPORT_RESTATED = "report_restated"
     PHOTO_READ = "photo_read"
+    QUOTE_SUPPORTS_CAUSE = "quote_supports_cause"
     SAFETY_WARNING = "safety_warning"
 
 

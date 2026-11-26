@@ -114,7 +114,9 @@ def test_answer_key_scores_one_on_every_metric() -> None:
         Metric.RECIPROCAL_RANK,
         Metric.RETRIEVAL_NDCG,
     }
-    assert means(dataset, model) == dict.fromkeys(set(Metric) - retrieval, 1)
+    assert means(dataset, model) == dict.fromkeys(
+        set(Metric) - retrieval - {Metric.QUOTE_SUPPORTS_CAUSE}, 1
+    )
 
 
 def test_model_that_always_abstains_only_passes_the_abstention_cases() -> None:

@@ -42,6 +42,8 @@ class Comparison(_Record):
     candidate_pages: str | None = None
     baseline_photo_reader: str | None = None
     candidate_photo_reader: str | None = None
+    baseline_judge: str | None = None
+    candidate_judge: str | None = None
     deltas: tuple[MetricDelta, ...]
 
 
@@ -74,8 +76,14 @@ def compare_runs(baseline: RunReport, candidate: RunReport) -> Comparison:
         candidate_pages=candidate.page_selection,
         baseline_photo_reader=baseline.photo_reader,
         candidate_photo_reader=candidate.photo_reader,
+        baseline_judge=_judge(baseline),
+        candidate_judge=_judge(candidate),
         deltas=tuple(deltas),
     )
+
+
+def _judge(report: RunReport) -> str | None:
+    return None if report.judge is None else f"{report.judge} ({report.judge_digest})"
 
 
 def _delta(metric: Metric, pairs: dict[str, tuple[float, float]]) -> MetricDelta:
@@ -117,6 +125,11 @@ def render_comparison(comparison: Comparison) -> str:
         lines.append(
             f"the runs read photos differently: {comparison.baseline_photo_reader or 'no reader'}"
             f" and {comparison.candidate_photo_reader or 'no reader'}"
+        )
+    if comparison.baseline_judge != comparison.candidate_judge:
+        lines.append(
+            f"the runs were judged differently: {comparison.baseline_judge or 'no judge'}"
+            f" and {comparison.candidate_judge or 'no judge'}"
         )
     for delta in comparison.deltas:
         lines.extend(f"improved  {delta.metric.value}: {case_id}" for case_id in delta.improved)

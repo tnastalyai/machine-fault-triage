@@ -14,6 +14,7 @@ CORRECT = "tests.evals.factories:correct_model"
 ABSTAINING = "tests.evals.factories:abstaining_model"
 EMBEDDER = "tests.evals.factories:configured_embedder"
 READER = "tests.evals.factories:configured_reader"
+JUDGE = "tests.evals.factories:configured_judge"
 
 
 def run(dataset: Path, model: str, out: Path) -> int:
@@ -509,3 +510,25 @@ def test_photo_reader_option_reads_the_photos_of_the_cases(
     report = RunReport.model_validate_json(out.read_text())
     assert report.photo_reader == f"{READER} text=E7"
     assert report.runs()[0].result.photo_readings == ("E7",)
+
+
+def test_judge_command_adds_an_opinion_to_a_stored_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = write_dataset(tmp_path / "set")
+    report = tmp_path / "report.json"
+    judged = tmp_path / "judged" / "report.json"
+    assert (
+        main(["eval", "run", "--dataset", str(root), "--model", CORRECT, "--out", str(report)]) == 0
+    )
+    arguments = ["eval", "judge", str(report), "--dataset", str(root), "--judge", JUDGE]
+
+    assert main([*arguments, "--judge-option", "verdict=partly", "--out", str(judged)]) == 0
+
+    assert "quote_supports_cause" in capsys.readouterr().out
+    stored = RunReport.model_validate_json(judged.read_text())
+    assert stored.judge == f"{JUDGE} verdict=partly"
+    assert stored.runs()[0].scores[Metric.QUOTE_SUPPORTS_CAUSE] == 0.5
+    unloadable = [*arguments[:-1], "tests.evals.factories:no_such_judge"]
+    assert main([*unloadable, "--out", str(report / "inside-a-file.json")]) == 2
+    assert "cannot write a report" in capsys.readouterr().err

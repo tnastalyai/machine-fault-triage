@@ -1,4 +1,4 @@
-"""Command line interface: ``machine-fault-triage eval run`` and ``eval compare``."""
+"""Command line interface: ``eval run``, ``eval judge``, ``eval compare`` and ``library sync``."""
 
 import argparse
 import importlib
@@ -13,6 +13,7 @@ from machine_fault_triage.embeddings import CachedEmbedder, forget_pages
 from machine_fault_triage.errors import InvalidRequestError, TriageError
 from machine_fault_triage.evals.cases import load_dataset
 from machine_fault_triage.evals.compare import compare_runs, render_comparison
+from machine_fault_triage.evals.judge import judge_run
 from machine_fault_triage.evals.report import Pricing, RunReport, render_summary
 from machine_fault_triage.evals.runner import run_eval
 from machine_fault_triage.ports import TextSplitter
@@ -186,6 +187,25 @@ def _parser() -> argparse.ArgumentParser:
         help="prompt version to run, to repeat a past evaluation",
     )
     run.add_argument("--out", type=Path, required=True, help="report file to write")
+    judge = commands.add_parser(
+        "judge", help="add a judging model's opinion on the cited evidence to a report"
+    )
+    judge.add_argument("report", type=Path, help="report written by eval run")
+    judge.add_argument("--dataset", type=Path, required=True, help="dataset of that report")
+    judge.add_argument(
+        "--judge",
+        required=True,
+        metavar="MODULE:CALLABLE",
+        help="import path of a callable that returns the judging model",
+    )
+    judge.add_argument(
+        "--judge-option",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="keyword argument for the judge callable; repeat for several",
+    )
+    judge.add_argument("--out", type=Path, required=True, help="judged report file to write")
     compare = commands.add_parser("compare", help="compare two reports case by case")
     compare.add_argument("baseline", type=Path)
     compare.add_argument("candidate", type=Path)
@@ -193,11 +213,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _run(arguments: argparse.Namespace) -> str:
-    try:
-        arguments.out.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as error:
-        message = f"cannot write a report to {arguments.out}: {error}"
-        raise InvalidRequestError(message) from error
+    _prepare(arguments.out)
     pages = _selector(arguments)
     model: StructuredModel = _load("model", arguments.model, arguments.option)
     reader = (
@@ -222,6 +238,27 @@ def _run(arguments: argparse.Namespace) -> str:
     )
     arguments.out.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
     return render_summary(report)
+
+
+def _judge(arguments: argparse.Namespace) -> str:
+    _prepare(arguments.out)
+    judge: StructuredModel = _load("judge", arguments.judge, arguments.judge_option)
+    report = judge_run(
+        _read_report(arguments.report),
+        load_dataset(arguments.dataset),
+        judge,
+        judge_label=" ".join((arguments.judge, *arguments.judge_option)),
+    )
+    arguments.out.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    return render_summary(report)
+
+
+def _prepare(out: Path) -> None:
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        message = f"cannot write a report to {out}: {error}"
+        raise InvalidRequestError(message) from error
 
 
 def _sync(arguments: argparse.Namespace) -> str:
@@ -346,4 +383,4 @@ def _read_report(path: Path) -> RunReport:
         raise InvalidRequestError(message) from error
 
 
-_COMMANDS = {"run": _run, "compare": _compare, "sync": _sync}
+_COMMANDS = {"run": _run, "judge": _judge, "compare": _compare, "sync": _sync}

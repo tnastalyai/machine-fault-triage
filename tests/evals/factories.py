@@ -2,7 +2,14 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from machine_fault_triage.drafts import DraftTriage
-from machine_fault_triage.evals import Dataset, EvalCase, Expectation, ExpectedDocumentEvidence
+from machine_fault_triage.evals import (
+    Dataset,
+    EvalCase,
+    Expectation,
+    ExpectedDocumentEvidence,
+    Verdict,
+)
+from machine_fault_triage.evals.judge import _Opinion
 from machine_fault_triage.models import TriageStatus
 from machine_fault_triage.testing import FakeEmbedder, FakeModel, FakePhotoReader
 from tests.factories import (
@@ -120,3 +127,7 @@ def configured_model(answer: str) -> FakeModel:
 
 def configured_reader(text: str = "E7") -> FakePhotoReader:
     return FakePhotoReader([text] * 20)
+
+
+def configured_judge(verdict: str = "supports") -> FakeModel:
+    return FakeModel([_Opinion(reason="The passage names the part.", verdict=Verdict(verdict))])

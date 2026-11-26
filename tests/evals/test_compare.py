@@ -85,3 +85,12 @@ def test_comparison_says_when_the_runs_read_photos_differently() -> None:
     assert "the runs read photos differently: no reader and reader-2" in render_comparison(
         compare_runs(baseline, candidate)
     )
+
+
+def test_comparison_says_when_the_runs_were_judged_differently() -> None:
+    baseline = run_eval(dataset([answerable_case()]), FakeModel([correct_draft()]), model_label="x")
+    candidate = baseline.model_copy(update={"judge": "judge-2", "judge_digest": "abc"})
+
+    assert "the runs were judged differently: no judge and judge-2 (abc)" in render_comparison(
+        compare_runs(baseline, candidate)
+    )

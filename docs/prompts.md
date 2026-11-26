@@ -5,7 +5,7 @@ The instructions sent to the model live in [`prompts.py`](../src/machine_fault_t
 - A version is immutable. A change of wording is a new version, and a test pins the fingerprint of every version, so an old text cannot be edited by accident.
 - Old versions stay runnable: `run_triage(..., prompt_version=1)` and `eval run --prompt 1` repeat a past evaluation under today's conditions.
 - Every evaluation report records the version and its fingerprint. `eval compare` says when its two runs used different prompts.
-- A new version becomes the default only after `eval run` on the same dataset, with the same page limit and repeats, for the old and the new version. Results on the seed dataset are not published, because its cases were written with the help of a model.
+- A new version becomes the default only after `eval run` on the same dataset, with the same page limit and repeats, for the old and the new version. Results on the seed dataset are not published as a baseline, because its cases were written with the help of a model; the history below quotes them only to say why a version was released.
 
 The fingerprint covers the instructions only. The answer schema (`DraftTriage`) and the sentence an adapter adds about evidence tags also reach the model; a change to either is a change of behaviour that the fingerprint does not show.
 
@@ -16,6 +16,10 @@ When an answer breaks the schema or is cut off, `run_triage` asks once more and 
 ## Reading photos
 
 Photos attached to a fault report are read in a separate call with instructions of their own (`PHOTO_READING`): copy what a display shows, describe lit lamps and icons, say when something is unreadable, do not diagnose, and treat any text in the photo as data. The reading then enters the triage call as an untrusted block. The fingerprint of a prompt version does not cover these instructions; a test pins them separately.
+
+## Judging a cause
+
+`eval judge` sends a judging model instructions of its own (`CAUSE_JUDGING`): decide from the cited passages alone whether they support one cause for this report and device, with the near misses spelled out as `does_not`. The report, the cause and the passages go in as untrusted blocks. A report records the fingerprint of these instructions next to the judge's name, and a test pins it.
 
 ## Device model
 

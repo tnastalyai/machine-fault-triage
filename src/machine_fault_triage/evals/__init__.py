@@ -11,12 +11,15 @@ from machine_fault_triage.evals.cases import (
     load_dataset,
 )
 from machine_fault_triage.evals.compare import Comparison, MetricDelta, compare_runs
+from machine_fault_triage.evals.judge import judge_run
 from machine_fault_triage.evals.report import (
     CaseOutcome,
+    Judgement,
     MetricSummary,
     Pricing,
     RepeatOutcome,
     RunReport,
+    Verdict,
     summarize,
 )
 from machine_fault_triage.evals.runner import run_eval
@@ -32,13 +35,16 @@ __all__ = [
     "ExpectedEvidence",
     "ExpectedHistoryEvidence",
     "ExpectedProblem",
+    "Judgement",
     "Metric",
     "MetricDelta",
     "MetricSummary",
     "Pricing",
     "RepeatOutcome",
     "RunReport",
+    "Verdict",
     "compare_runs",
+    "judge_run",
     "load_dataset",
     "run_eval",
     "score",

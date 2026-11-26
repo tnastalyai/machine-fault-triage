@@ -2,6 +2,8 @@
 
 import math
 import statistics
+from collections import Counter
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,6 +16,27 @@ class _Record(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+class Verdict(StrEnum):
+    """What a judging model made of the evidence cited for one cause."""
+
+    SUPPORTS = "supports"
+    PARTLY = "partly"
+    DOES_NOT = "does_not"
+
+
+class Judgement(_Record):
+    """The verdict on one cause of a result, counted from 1 in the order of the result.
+
+    ``verdict`` is ``None`` when the judge gave no usable answer; such a cause
+    is left out of the score. ``reason`` is the judge's own sentence, model
+    text derived from untrusted data.
+    """
+
+    cause: int = Field(ge=1)
+    verdict: Verdict | None = None
+    reason: str = ""
+
+
 class RepeatOutcome(_Record):
     """The result of one run of one case, with its scores."""
 
@@ -21,6 +44,8 @@ class RepeatOutcome(_Record):
     scores: dict[Metric, float]
     seconds: float = Field(ge=0)
     usage: Usage | None = None
+    judgements: tuple[Judgement, ...] = ()
+    judge_usage: Usage | None = None
 
 
 class CaseOutcome(_Record):
@@ -89,6 +114,8 @@ class RunReport(_Record):
     prompt_digest: str | None = None
     page_selection: str | None = None
     photo_reader: str | None = None
+    judge: str | None = None
+    judge_digest: str | None = None
     repeats: int = Field(ge=1)
     pricing: Pricing | None = None
     cases: tuple[CaseOutcome, ...]
@@ -111,6 +138,10 @@ class RunReport(_Record):
     def photo_usage(self) -> Usage | None:
         """Total the tokens spent on reading the photos of the reports, if any were reported."""
         return total_usage(run.result.photo_usage for run in self.runs())
+
+    def judge_usage(self) -> Usage | None:
+        """Total the tokens a judging model spent on this report, if any were reported."""
+        return total_usage(run.judge_usage for run in self.runs())
 
     def embedding_tokens(self) -> int:
         """Total the tokens that page selection spent on embeddings."""
@@ -207,10 +238,31 @@ def _resources(report: RunReport) -> str:
             f" for reading photos with {report.photo_reader or 'an unnamed reader'},"
             " not in the cost"
         )
+    if report.judge is not None:
+        parts.append(_judging(report))
     cost = report.cost()
     if cost is not None:
         parts.append(f"${cost:.2f} in total, ${cost / len(runs):.4f} per run")
     return ", ".join(parts)
+
+
+def _judging(report: RunReport) -> str:
+    judgements = [judgement for run in report.runs() for judgement in run.judgements]
+    counts = Counter(judgement.verdict for judgement in judgements)
+    usage = report.judge_usage()
+    spent = (
+        ""
+        if usage is None
+        else (
+            f", {usage.input_tokens} input and {usage.output_tokens} output tokens, not in the cost"
+        )
+    )
+    return (
+        f"{Metric.QUOTE_SUPPORTS_CAUSE.value} is the opinion of {report.judge}"
+        f" (instructions {report.judge_digest}) on {len(judgements)} causes:"
+        f" {counts[Verdict.SUPPORTS]} supports, {counts[Verdict.PARTLY]} partly,"
+        f" {counts[Verdict.DOES_NOT]} does not, {counts[None]} left unjudged{spent}"
+    )
 
 
 def format_error(value: float | None) -> str:
