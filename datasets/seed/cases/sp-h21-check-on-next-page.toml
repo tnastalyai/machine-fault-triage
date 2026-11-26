@@ -1,0 +1,24 @@
+id = "sp-h21-check-on-next-page"
+category = "two_pages"
+documents = ["drennik-ts2400-manual"]
+
+[report]
+description = "We get H21 every time we close the spray arms up for the road. The arms do go all the way in, they just need well over a minute now, last season it was maybe twenty seconds. The little lamp at the hinge comes on once they are in."
+language = "en"
+
+[expect]
+status = "ok"
+cause_terms = [["restrictor"]]
+safety_warning = true
+
+[[expect.evidence]]
+type = "document"
+document_id = "drennik-ts2400-manual"
+page = 27
+anchor = "H21"
+
+[[expect.evidence]]
+type = "document"
+document_id = "drennik-ts2400-manual"
+page = 28
+anchor = "restrictor"

@@ -78,6 +78,29 @@ Streaks behind single nozzles are caused by worn or partly blocked nozzles. See 
 """
 
 [[pages]]
+number = 27
+text = """
+8 Boom folding
+
+8.1 Boom does not reach the folded position
+H21: the boom did not reach the folded position within 45 s of the fold command. The controller closes the fold valve and blocks folding until the code is cleared. H21 does not name the failed part. Work through checks 1 to 3 in order: each check assumes that the one before it passed.
+
+Check 1: fold position sensor B6 on the left inner hinge. With the boom folded, the LED on the sensor must light. A gap of more than 4 mm between the sensor and its target plate gives H21 with a boom that is in fact folded. Set the gap to 2 mm.
+
+(checks continue on the next page)
+"""
+
+[[pages]]
+number = 28
+text = """
+Check 2: fold valve Y14 on the hydraulic block. Measure the coil: 7 to 9 Ohm. A coil outside this range is replaced together with its plug.
+
+Check 3: restrictor in the line to the fold cylinders. Wings that fold fully but take longer than 45 s have a restrictor blocked by paint flakes or sealing tape. Remove the restrictor, 1.2 mm bore, clean it and refit it with the arrow towards the cylinder.
+
+Before loosening any fitting on the hydraulic block, lower the wings onto the transport rests and relieve the oil pressure. Wings held only by oil pressure can drop.
+"""
+
+[[pages]]
 number = 34
 text = """
 10 Spare parts

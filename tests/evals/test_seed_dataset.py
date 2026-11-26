@@ -20,6 +20,7 @@ from machine_fault_triage.evals import (
     summarize,
 )
 from machine_fault_triage.models import Confidence
+from machine_fault_triage.selection import KeywordPageSelector
 from machine_fault_triage.testing import FakeModel, FakePhotoReader
 
 SEED = Path(__file__).resolve().parents[2] / "datasets" / "seed"
@@ -83,7 +84,7 @@ def test_seed_dataset_covers_both_devices_and_the_planned_categories() -> None:
     dataset = load_dataset(SEED)
 
     categories = Counter(case.category for case in dataset.cases)
-    assert len(dataset.cases) == 32
+    assert len(dataset.cases) == 33
     assert categories["code_on_photo"] == 3
     assert categories["two_problems"] == 2
     assert categories["model_variant"] == categories["model_variant_table"] == 4
@@ -91,6 +92,7 @@ def test_seed_dataset_covers_both_devices_and_the_planned_categories() -> None:
     assert {"injection_report", "injection_document", "injection_history"} <= set(categories)
     assert sum(case.expect.status is TriageStatus.NOT_ENOUGH_DATA for case in dataset.cases) == 7
     assert categories["noisy_report"] == 3
+    assert categories["two_pages"] == 1
 
 
 def test_every_answerable_seed_case_names_the_evidence_for_its_answer() -> None:
@@ -145,3 +147,23 @@ def test_model_variant_cases_come_in_pairs_that_differ_only_in_the_model() -> No
     assert len(variants) == 2 * len(models)
     assert all(len(pair) == 2 for pair in models.values())
     assert all(case.expect.other_models for case in variants)
+
+
+def test_check_that_continues_on_the_next_page_is_sent_at_a_small_limit_only_with_neighbours() -> (
+    None
+):
+    dataset = load_dataset(SEED)
+    (case,) = (case for case in dataset.cases if case.category == "two_pages")
+    documents = dataset.documents_for(case)
+    expected = {
+        (item.document_id, item.page)
+        for item in case.expect.evidence
+        if isinstance(item, ExpectedDocumentEvidence)
+    }
+
+    alone = KeywordPageSelector(4).rank(case.report, documents)
+    with_neighbours = KeywordPageSelector(4, neighbours=1).rank(case.report, documents)
+
+    assert {page for _, page in expected} == {27, 28}
+    assert len(expected - set(alone)) == 1
+    assert expected <= set(with_neighbours)
