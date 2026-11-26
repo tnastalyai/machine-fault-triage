@@ -21,7 +21,7 @@ flowchart LR
 - A file is read again when its content changed, when `load_pdf` changed how it extracts text, or when the recognition engine changed. A file that cannot be read is reported and does not stop the others, and the version read earlier stays in use.
 - A page with a text layer is never recognised. A page without one is left out unless an `OcrEngine` is given, and then it is marked `source="ocr"`, a mark that follows it into every citation.
 - The tenant and the device come from the folder names and are looked up by equality. `documents_for` answers from the registry alone, so a triage run never parses a PDF.
-- A sync embeds nothing. Page vectors are made by the first triage that needs them and kept by `CachedEmbedder` in a second SQLite file, under the embedding model and a hash of the page text.
+- A sync embeds nothing. Page vectors are made by the triage that needs them. Wrapped in `CachedEmbedder`, an embedder keeps them in a second SQLite file, under the embedding model and a hash of the page text; without it every page is embedded again for each report.
 
 ## Answering one fault report
 
@@ -47,7 +47,7 @@ sequenceDiagram
     opt a page selector was given
         core->>selector: report with the readings, all pages
         opt hybrid selection and more pages than the limit
-            selector->>embedder: the report, and pages not embedded before
+            selector->>embedder: the report, and the pages not in the vector cache
             embedder-->>selector: vectors
         end
         selector-->>core: the best-matching pages
@@ -80,11 +80,11 @@ The result always carries the tokens the run spent: `usage` for the model, every
 - A service record counts when its id is among the records supplied.
 - `evidence_level` names the strongest verified evidence: a manual, the history, or general knowledge when no citation verified.
 - A model that says the evidence is not enough, or names no cause, ends as `not_enough_data` with its questions for the customer.
-- Verification proves that the quote exists. It does not prove that the quote supports the cause, that a table row belongs to the right model of the device, or that a photo was read correctly. The first two are measured in evaluation only.
+- Verification proves that the quote exists. It does not prove that the quote supports the cause, that a table row belongs to the right model of the device, or that a photo was read correctly. All three are measured in evaluation only, as `quote_supports_cause`, `right_model` and `photo_read`.
 
 ### What leaves the process
 
-The core sends nothing anywhere. With the shipped adapters, the fault report, what was read from its photos, the device model, the selected pages and the service records go to the provider of the model; the photos as given, metadata included, go to the provider of the reader; the report and the text of pages not embedded before go to the provider of the embedder. `RapidOcrEngine`, the registry and the vector cache stay on the machine.
+The core sends nothing anywhere. With the shipped adapters, the fault report, what was read from its photos, the device model, the selected pages and the service records go to the provider of the model; the photos as given, metadata included, go to the provider of the reader; the report and the text of the pages go to the provider of the embedder, behind `CachedEmbedder` only the pages not embedded before. `RapidOcrEngine`, the registry and the vector cache stay on the machine.
 
 Every piece of evidence reaches the model as an `UntrustedBlock`, apart from the instructions and wrapped by the adapter in tags that its text cannot forge ([prompts.md](prompts.md)).
 
