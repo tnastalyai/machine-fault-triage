@@ -116,6 +116,7 @@ class RunReport(_Record):
     photo_reader: str | None = None
     judge: str | None = None
     judge_digest: str | None = None
+    judge_context: bool = False
     repeats: int = Field(ge=1)
     pricing: Pricing | None = None
     cases: tuple[CaseOutcome, ...]
@@ -246,9 +247,15 @@ def _resources(report: RunReport) -> str:
     return ", ".join(parts)
 
 
+def _shown(report: RunReport) -> str:
+    return "each quote with its paragraph" if report.judge_context else "the quotes alone"
+
+
 def _judging(report: RunReport) -> str:
     judgements = [judgement for run in report.runs() for judgement in run.judgements]
     counts = Counter(judgement.verdict for judgement in judgements)
+    first = [judgement.verdict for judgement in judgements if judgement.cause == 1]
+    bare = sum(not cause.is_grounded for run in report.runs() for cause in run.result.causes)
     usage = report.judge_usage()
     spent = (
         ""
@@ -259,9 +266,12 @@ def _judging(report: RunReport) -> str:
     )
     return (
         f"{Metric.QUOTE_SUPPORTS_CAUSE.value} is the opinion of {report.judge}"
-        f" (instructions {report.judge_digest}) on {len(judgements)} causes:"
+        f" (instructions {report.judge_digest}, shown {_shown(report)})"
+        f" on {len(judgements)} causes:"
         f" {counts[Verdict.SUPPORTS]} supports, {counts[Verdict.PARTLY]} partly,"
-        f" {counts[Verdict.DOES_NOT]} does not, {counts[None]} left unjudged{spent}"
+        f" {counts[Verdict.DOES_NOT]} does not, {counts[None]} left unjudged;"
+        f" {first.count(Verdict.SUPPORTS)} of {len(first)} first causes supported;"
+        f" {bare} causes without verified evidence not asked about{spent}"
     )
 
 

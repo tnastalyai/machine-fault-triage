@@ -10,6 +10,7 @@ from machine_fault_triage.evals import (
     Verdict,
 )
 from machine_fault_triage.evals.judge import _Opinion
+from machine_fault_triage.inputs import Photo
 from machine_fault_triage.models import TriageStatus
 from machine_fault_triage.testing import FakeEmbedder, FakeModel, FakePhotoReader
 from tests.factories import (
@@ -131,3 +132,13 @@ def configured_reader(text: str = "E7") -> FakePhotoReader:
 
 def configured_judge(verdict: str = "supports") -> FakeModel:
     return FakeModel([_Opinion(reason="The passage names the part.", verdict=Verdict(verdict))])
+
+
+def with_photo(case: EvalCase, **expectation: object) -> EvalCase:
+    photo = Photo(media_type="image/png", data=b"pixels")
+    return case.model_copy(
+        update={
+            "report": case.report.model_copy(update={"photos": (photo,)}),
+            "expect": case.expect.model_copy(update=expectation),
+        }
+    )

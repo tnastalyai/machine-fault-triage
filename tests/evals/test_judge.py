@@ -7,11 +7,12 @@ from pydantic import BaseModel
 from machine_fault_triage import GenerationStatus, InvalidRequestError, ServiceRecord, Usage
 from machine_fault_triage.drafts import DraftHistoryCitation
 from machine_fault_triage.errors import ModelCallError
-from machine_fault_triage.evals import Metric, RunReport, Verdict, judge_run, run_eval
+from machine_fault_triage.evals import Metric, RunReport, Verdict, compare_runs, judge_run, run_eval
+from machine_fault_triage.evals.compare import render_comparison
 from machine_fault_triage.evals.judge import _Opinion, judge_digest
 from machine_fault_triage.evals.report import render_summary
 from machine_fault_triage.models import HistoryScope
-from machine_fault_triage.ports import Generation, GenerationRequest
+from machine_fault_triage.ports import Generation, GenerationRequest, StructuredModel
 from machine_fault_triage.prompts import CAUSE_JUDGING
 from machine_fault_triage.testing import FakeModel, FakePhotoReader
 from tests.evals.factories import (
@@ -20,8 +21,8 @@ from tests.evals.factories import (
     correct_draft,
     dataset,
     unanswerable_case,
+    with_photo,
 )
-from tests.evals.test_runner import with_photo
 from tests.factories import draft_cause, draft_triage, manual_citation
 
 
@@ -60,8 +61,9 @@ def test_each_cause_with_verified_evidence_gets_a_verdict_and_the_result_their_m
     assert judged.judge_usage() == Usage(input_tokens=600, output_tokens=80)
     assert (
         "quote_supports_cause is the opinion of judge-1"
-        f" (instructions {judge_digest()}) on 2 causes:"
-        " 1 supports, 1 partly, 0 does not, 0 left unjudged,"
+        f" (instructions {judge_digest()}, shown the quotes alone) on 2 causes:"
+        " 1 supports, 1 partly, 0 does not, 0 left unjudged;"
+        " 1 of 1 first causes supported; 0 causes without verified evidence not asked about,"
         " 600 input and 80 output tokens, not in the cost"
     ) in render_summary(judged)
 
@@ -138,9 +140,9 @@ def test_cause_without_verified_evidence_and_an_abstention_are_not_judged() -> N
 
     assert judge.requests == []
     assert all(Metric.QUOTE_SUPPORTS_CAUSE not in run.scores for run in judged.runs())
-    assert "on 0 causes: 0 supports, 0 partly, 0 does not, 0 left unjudged" in render_summary(
-        judged
-    )
+    summary = render_summary(judged)
+    assert "on 0 causes: 0 supports, 0 partly, 0 does not, 0 left unjudged" in summary
+    assert "0 of 0 first causes supported; 1 causes without verified evidence" in summary
     assert "tokens, not in the cost" not in render_summary(judged).split("opinion of")[1]
 
 
@@ -152,28 +154,52 @@ class UnreachableJudge:
         raise ModelCallError(message)
 
 
+class FailsFirst:
+    def __init__(self, failing: StructuredModel) -> None:
+        self._judges = [failing, FakeModel([opinion(Verdict.PARTLY)])]
+
+    def generate[OutputT: BaseModel](
+        self, request: GenerationRequest, output_type: type[OutputT]
+    ) -> Generation[OutputT]:
+        return self._judges.pop(0).generate(request, output_type)
+
+
 @pytest.mark.parametrize(
-    "judge",
+    ("failing", "reason"),
     [
-        FakeModel([GenerationStatus.REFUSED]),
-        FakeModel([GenerationStatus.TRUNCATED]),
-        FakeModel([correct_draft()]),
-        UnreachableJudge(),
+        (FakeModel([GenerationStatus.REFUSED]), "no verdict: refused"),
+        (FakeModel([GenerationStatus.TRUNCATED]), "no verdict: truncated"),
+        (FakeModel([correct_draft()], invalid_detail="verdict: missing"), "no verdict: verdict"),
+        (UnreachableJudge(), "no verdict: no answer to 3 blocks as _Opinion"),
     ],
 )
-def test_judge_that_gives_no_usable_answer_leaves_the_cause_unjudged(
-    judge: FakeModel | UnreachableJudge,
+def test_cause_the_judge_gave_no_usable_answer_for_is_left_unjudged_with_the_reason(
+    failing: StructuredModel, reason: str
 ) -> None:
+    two_causes = draft_triage([draft_cause([manual_citation()]), draft_cause([manual_citation()])])
+
     judged = judge_run(
-        finished_run(correct_draft()), dataset([answerable_case()]), judge, judge_label="judge-1"
+        finished_run(two_causes),
+        dataset([answerable_case()]),
+        FailsFirst(failing),
+        judge_label="judge-1",
     )
 
     (run,) = judged.runs()
-    assert Metric.QUOTE_SUPPORTS_CAUSE not in run.scores
-    assert [(j.cause, j.verdict) for j in run.judgements] == [(1, None)]
-    assert "on 1 causes: 0 supports, 0 partly, 0 does not, 1 left unjudged" in render_summary(
-        judged
-    )
+    assert run.scores[Metric.QUOTE_SUPPORTS_CAUSE] == 0.5
+    assert [(j.cause, j.verdict) for j in run.judgements] == [(1, None), (2, Verdict.PARTLY)]
+    assert run.judgements[0].reason.startswith(reason)
+    assert "1 partly, 0 does not, 1 left unjudged; 0 of 1 first" in render_summary(judged)
+
+
+def test_judge_that_answers_for_no_cause_fails_the_run_and_says_why() -> None:
+    with pytest.raises(ModelCallError, match="none of the 1 causes; the last one: no verdict: no"):
+        judge_run(
+            finished_run(correct_draft()),
+            dataset([answerable_case()]),
+            UnreachableJudge(),
+            judge_label="judge-1",
+        )
 
 
 def test_judging_again_replaces_the_earlier_opinion() -> None:
@@ -185,9 +211,9 @@ def test_judging_again_replaces_the_earlier_opinion() -> None:
         judge_label="judge-1",
     )
 
-    again = judge_run(first, cases, FakeModel([GenerationStatus.REFUSED]), judge_label="judge-2")
+    again = judge_run(first, cases, FakeModel([opinion(Verdict.DOES_NOT)]), judge_label="judge-2")
 
-    assert Metric.QUOTE_SUPPORTS_CAUSE not in again.runs()[0].scores
+    assert again.runs()[0].scores[Metric.QUOTE_SUPPORTS_CAUSE] == 0
     assert again.judge == "judge-2"
 
 
@@ -203,3 +229,66 @@ def test_report_made_on_another_dataset_is_not_judged() -> None:
         )
 
     assert judge.requests == []
+
+
+def test_with_context_the_judge_also_gets_the_paragraph_each_quote_stands_in() -> None:
+    cases = dataset([answerable_case()])
+    spanning = manual_citation("E7: flow sensor open")
+    report = run_eval(cases, FakeModel([draft_triage([draft_cause([spanning])])]), model_label="x")
+    judge = FakeModel([opinion(Verdict.SUPPORTS)])
+
+    judged = judge_run(report, cases, judge, judge_label="judge-1", context=True)
+
+    page = cases.documents[0].pages[1].text
+    paragraph = next(part for part in page.split("\n\n") if "E7: flow sensor open" in part)
+    assert [(block.label, block.content) for block in judge.requests[0].untrusted[-2:]] == [
+        ("quoted passage", "E7: flow sensor open"),
+        ("paragraph the quote stands in", paragraph),
+    ]
+    assert judged.judge_context
+    assert "shown each quote with its paragraph" in render_summary(judged)
+    assert "quotes with paragraphs" in render_comparison(compare_runs(report, judged))
+
+
+def test_several_workers_keep_each_verdict_with_its_cause() -> None:
+    class EchoingJudge:
+        def generate[OutputT: BaseModel](
+            self, request: GenerationRequest, output_type: type[OutputT]
+        ) -> Generation[OutputT]:
+            title = request.untrusted[1].content.splitlines()[0]
+            verdict = Verdict.SUPPORTS if title == "first" else Verdict.DOES_NOT
+            return Generation[OutputT](
+                status=GenerationStatus.COMPLETED,
+                output=output_type.model_validate({"reason": title, "verdict": verdict}),
+            )
+
+    causes = [
+        draft_cause([manual_citation()]).model_copy(update={"title": title})
+        for title in ("first", "second")
+    ]
+    report = run_eval(
+        dataset([answerable_case()]),
+        FakeModel([draft_triage(causes), draft_triage(causes[::-1])]),
+        model_label="x",
+        repeats=2,
+    )
+
+    judged = judge_run(
+        report, dataset([answerable_case()]), EchoingJudge(), judge_label="echo", workers=4
+    )
+
+    assert [[j.reason for j in run.judgements] for run in judged.runs()] == [
+        ["first", "second"],
+        ["second", "first"],
+    ]
+
+
+def test_fewer_than_one_worker_is_refused() -> None:
+    with pytest.raises(InvalidRequestError, match="workers must be at least 1"):
+        judge_run(
+            finished_run(correct_draft()),
+            dataset([answerable_case()]),
+            FakeModel([]),
+            judge_label="judge-1",
+            workers=0,
+        )

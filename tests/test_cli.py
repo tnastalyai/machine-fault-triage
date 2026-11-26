@@ -523,7 +523,8 @@ def test_judge_command_adds_an_opinion_to_a_stored_report(
     )
     arguments = ["eval", "judge", str(report), "--dataset", str(root), "--judge", JUDGE]
 
-    assert main([*arguments, "--judge-option", "verdict=partly", "--out", str(judged)]) == 0
+    options = ["--judge-option", "verdict=partly", "--context", "--workers", "2"]
+    assert main([*arguments, *options, "--out", str(judged)]) == 0
 
     assert "quote_supports_cause" in capsys.readouterr().out
     stored = RunReport.model_validate_json(judged.read_text())

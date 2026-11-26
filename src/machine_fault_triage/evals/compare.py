@@ -83,7 +83,10 @@ def compare_runs(baseline: RunReport, candidate: RunReport) -> Comparison:
 
 
 def _judge(report: RunReport) -> str | None:
-    return None if report.judge is None else f"{report.judge} ({report.judge_digest})"
+    if report.judge is None:
+        return None
+    shown = "quotes with paragraphs" if report.judge_context else "quotes alone"
+    return f"{report.judge} ({report.judge_digest}, {shown})"
 
 
 def _delta(metric: Metric, pairs: dict[str, tuple[float, float]]) -> MetricDelta:

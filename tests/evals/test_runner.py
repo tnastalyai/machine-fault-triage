@@ -11,12 +11,11 @@ from machine_fault_triage import (
     HybridPageSelector,
     InvalidRequestError,
     KeywordPageSelector,
-    Photo,
     Selection,
     TriageStatus,
     Usage,
 )
-from machine_fault_triage.evals import EvalCase, Metric, Pricing, RunReport, run_eval, summarize
+from machine_fault_triage.evals import Metric, Pricing, RunReport, run_eval, summarize
 from machine_fault_triage.evals.report import render_summary
 from machine_fault_triage.prompts import instructions, prompt_digest
 from machine_fault_triage.testing import FakeEmbedder, FakeModel, FakePhotoReader
@@ -26,6 +25,7 @@ from tests.evals.factories import (
     correct_draft,
     dataset,
     unanswerable_case,
+    with_photo,
 )
 
 
@@ -281,16 +281,6 @@ def test_device_model_of_a_case_is_sent_and_counted_in_the_check_up_front() -> N
     sent = sum(len(block.label) + len(block.content) for block in request.untrusted)
     with pytest.raises(InvalidRequestError, match=f"holds {sent} characters"):
         run_eval(dataset([case]), FakeModel([]), model_label="x", evidence_limit=sent - 1)
-
-
-def with_photo(case: EvalCase, **expectation: object) -> EvalCase:
-    photo = Photo(media_type="image/png", data=b"pixels")
-    return case.model_copy(
-        update={
-            "report": case.report.model_copy(update={"photos": (photo,)}),
-            "expect": case.expect.model_copy(update=expectation),
-        }
-    )
 
 
 def test_case_with_photos_and_no_reader_stops_the_run_before_any_model_call() -> None:

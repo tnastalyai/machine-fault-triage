@@ -19,7 +19,7 @@ Photos attached to a fault report are read in a separate call with instructions 
 
 ## Judging a cause
 
-`eval judge` sends a judging model instructions of its own (`CAUSE_JUDGING`): decide from the cited passages alone whether they support one cause for this report and device, with the near misses spelled out as `does_not`. The report, the cause and the passages go in as untrusted blocks. A report records the fingerprint of these instructions next to the judge's name, and a test pins it.
+`eval judge` sends a judging model instructions of its own (`CAUSE_JUDGING`): decide from the cited passages alone whether they support one cause for this report and device, with the near misses spelled out as `does_not`. The report, the cause and the passages go in as untrusted blocks; with `--context` the paragraph around each quote is one more block under the same instructions. A report records the fingerprint of these instructions next to the judge's name, and a test pins it.
 
 ## Device model
 

@@ -205,6 +205,12 @@ def _parser() -> argparse.ArgumentParser:
         metavar="KEY=VALUE",
         help="keyword argument for the judge callable; repeat for several",
     )
+    judge.add_argument(
+        "--context",
+        action="store_true",
+        help="show the judge each quote with the paragraph it stands in, not the quote alone",
+    )
+    judge.add_argument("--workers", type=int, default=1, help="judge calls made at once")
     judge.add_argument("--out", type=Path, required=True, help="judged report file to write")
     compare = commands.add_parser("compare", help="compare two reports case by case")
     compare.add_argument("baseline", type=Path)
@@ -248,6 +254,8 @@ def _judge(arguments: argparse.Namespace) -> str:
         load_dataset(arguments.dataset),
         judge,
         judge_label=" ".join((arguments.judge, *arguments.judge_option)),
+        context=arguments.context,
+        workers=arguments.workers,
     )
     arguments.out.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
     return render_summary(report)
